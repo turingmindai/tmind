@@ -108,6 +108,29 @@ What it does:
 
 To uninstall: `rm .git/hooks/pre-push`
 
+### Optional: TuringMind Pro (Cloud Features)
+
+Supercharge your reviews with cloud-powered memory and analytics:
+
+```bash
+# Get your API key at https://turingmind.ai
+/config set TURINGMIND_API_KEY tm_sk_your_key_here
+```
+
+**What Pro enables:**
+
+| Feature | Free | Pro |
+|---------|------|-----|
+| Local code review | ✅ | ✅ |
+| All review agents | ✅ | ✅ |
+| **Memory** (learns from past reviews) | ❌ | ✅ |
+| **Dashboard** (metrics & trends) | ❌ | ✅ |
+| **False positive learning** | ❌ | ✅ |
+| **Team conventions sync** | ❌ | ✅ |
+| **Hotspot detection** | ❌ | ✅ |
+
+**Privacy:** Your code never leaves your machine. We only sync issue metadata (file paths, line numbers, issue types) — never source code.
+
 ---
 
 ## ✨ Features
@@ -241,9 +264,12 @@ plugins/turingmind/
 │   ├── security.md
 │   ├── compliance.md
 │   ├── architecture.md
+│   ├── cloud-sync.md   # TuringMind Pro integration
+│   ├── index.md        # Agent router
 │   └── language-*.md
 └── templates/          # Output & filtering
     ├── output-format.md
+    ├── memory-context.md   # Cloud memory injection
     └── false-positive-rules.md
 ```
 
@@ -256,6 +282,48 @@ cp agents/language-typescript.md agents/language-go.md
 
 # Add custom security rules
 # Edit agents/security.md
+```
+
+---
+
+## 🧠 TuringMind Pro Features
+
+### Memory System
+
+When Pro is enabled, TuringMind remembers:
+
+| Memory Type | How It Helps |
+|-------------|--------------|
+| **False Positives** | "You dismissed this pattern 5 times — skipping" |
+| **Hotspot Files** | "This file has had 12 issues this month — extra scrutiny" |
+| **Team Conventions** | "Your team prefers optional chaining over null checks" |
+| **Open Issues** | "Check if this commit fixes the SQL injection on line 45" |
+
+### Dashboard
+
+Track your code quality over time:
+- 📈 Issues found/fixed trends
+- 🔥 Hotspot files (where bugs cluster)
+- 📊 Team metrics and leaderboards
+- 🎯 Quality score per repository
+
+### How Data Flows
+
+```
+┌─────────────────────┐      ┌─────────────────────────┐
+│   Your Machine      │      │   TuringMind Cloud      │
+│   (Code stays here) │      │   (Metadata only)       │
+├─────────────────────┤      ├─────────────────────────┤
+│                     │      │                         │
+│  📁 Source code     │  ❌  │  Never sent             │
+│  📝 File paths      │  ──▶ │  ✅ For tracking        │
+│  🔢 Line numbers    │  ──▶ │  ✅ For analytics       │
+│  🏷️ Issue types     │  ──▶ │  ✅ For learning        │
+│  📊 Review metrics  │  ──▶ │  ✅ For dashboard       │
+│                     │      │                         │
+│  ◀── Memory context │  ◀── │  False positives, etc.  │
+│                     │      │                         │
+└─────────────────────┘      └─────────────────────────┘
 ```
 
 ---

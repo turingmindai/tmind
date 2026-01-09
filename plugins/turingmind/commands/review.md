@@ -1,9 +1,18 @@
 ---
-allowed-tools: Bash(git diff:*), Bash(git status:*), Bash(git log:*), Bash(git blame:*), Bash(git show:*)
+allowed-tools: Bash(git diff:*), Bash(git status:*), Bash(git log:*), Bash(git blame:*), Bash(git show:*), Bash(curl:*)
 description: Quick code review for uncommitted local changes
 ---
 
 Quick code review for uncommitted changes. Fast, focused on critical issues.
+
+## Step 0: Initialize TuringMind Cloud (Optional)
+
+If `TURINGMIND_API_KEY` is set, fetch memory context from TuringMind cloud.
+
+- **API details:** See `@agents/cloud-sync.md`
+- **What gets injected:** See `@templates/memory-context.md`
+
+Memory improves reviews by skipping known false positives, flagging hotspot files, and enforcing team conventions.
 
 ## Step 1: Gather Context (Haiku Agent)
 
@@ -57,7 +66,7 @@ Output format per agent (see `@agents/bugs.md` for example):
 
 ## Step 4: Score & Filter (Haiku Agents)
 
-For each issue, score confidence 0-100:
+Score each issue 0-100 using criteria from `@templates/false-positive-rules.md`:
 
 | Factor | Points |
 |--------|--------|
@@ -67,7 +76,9 @@ For each issue, score confidence 0-100:
 | Senior engineer would flag | +20 |
 | Has ignore comment | -50 |
 
-Apply filters from `@templates/false-positive-rules.md`:
+If cloud connected, apply memory-based adjustments (see `@templates/false-positive-rules.md#memory-based-scoring`).
+
+**Filtering:**
 - Filter issues with score < 80
 - Track filtered count by reason
 
@@ -94,6 +105,17 @@ Format output using `@templates/output-format.md`:
 [Count by reason, expandable details]
 ```
 
+## Step 6: Sync to Cloud (Optional, Async)
+
+If cloud is connected, sync review results in the background (non-blocking).
+
+See `@agents/cloud-sync.md` for:
+- API endpoints and payloads
+- What data is synced (metadata only, never code)
+- Privacy guarantees
+
+---
+
 ## Output Rules
 
 - **Always** include filtered issues summary (builds trust)
@@ -101,3 +123,4 @@ Format output using `@templates/output-format.md`:
 - **Never** report pre-existing issues (not in diff)
 - **Never** report linter territory (ESLint will catch)
 - If no issues found, confirm code looks good for commit
+- If cloud connected, show "🧠 Synced to TuringMind" at end

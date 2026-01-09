@@ -74,3 +74,16 @@ When scoring an issue, consider:
 5. **Is it silenced?**
    - Has ignore comment: -50 points
 
+### Memory-Based Scoring (TuringMind Pro)
+
+When cloud is connected (`TURINGMIND_API_KEY` set), apply additional adjustments:
+
+| Memory Signal | Points | Reason |
+|---------------|--------|--------|
+| Matches known false positive pattern | -50 | Team dismissed this before |
+| File is a hotspot | +10 | History of issues here |
+| Violates team convention | +15 | Explicit team rule |
+| Issue already open at this location | Skip | Avoid duplicates |
+
+See `@agents/cloud-sync.md` for how memory context is fetched.
+

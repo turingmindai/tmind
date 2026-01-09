@@ -1,6 +1,6 @@
 {
   "name": "turingmind",
-  "version": "0.2.0",
+  "version": "0.4.0",
   "owner": {
     "name": "TuringMind"
   },
@@ -8,7 +8,14 @@
     {
       "name": "turingmind",
       "source": "./plugins/turingmind",
-      "description": "Catch bugs before they catch you. AI-powered code review for your uncommitted changes."
+      "description": "Catch bugs before they catch you. AI-powered code review with cloud memory and analytics."
     }
-  ]
+  ],
+  "config": {
+    "TURINGMIND_API_KEY": {
+      "description": "Optional: API key for TuringMind Pro features (memory, dashboard, analytics). Get yours at https://turingmind.ai",
+      "type": "string",
+      "required": false
+    }
+  }
 }

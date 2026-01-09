@@ -1,9 +1,18 @@
 ---
-allowed-tools: Bash(git diff:*), Bash(git status:*), Bash(git log:*), Bash(git blame:*), Bash(git show:*), Read, Grep, Glob, LS
+allowed-tools: Bash(git diff:*), Bash(git status:*), Bash(git log:*), Bash(git blame:*), Bash(git show:*), Bash(curl:*), Read, Grep, Glob, LS
 description: Deep comprehensive code review with full context analysis
 ---
 
 Comprehensive code review with full context analysis. Includes architecture review, test coverage, and impact analysis.
+
+## Phase 0: Initialize TuringMind Cloud (Optional)
+
+If `TURINGMIND_API_KEY` is set, fetch memory context from TuringMind cloud.
+
+- **API details:** See `@agents/cloud-sync.md`
+- **What gets injected:** See `@templates/memory-context.md`
+
+Memory improves reviews by skipping known false positives, flagging hotspot files, and enforcing team conventions.
 
 ## Phase 1: Gather Context (3 Parallel Haiku Agents)
 
@@ -83,7 +92,7 @@ Using Phase 1C results, analyze:
 
 ## Phase 5: Score & Filter (Haiku Agents)
 
-For each issue, score confidence 0-100:
+Score each issue 0-100 using criteria from `@templates/false-positive-rules.md`:
 
 | Factor | Points |
 |--------|--------|
@@ -93,8 +102,10 @@ For each issue, score confidence 0-100:
 | Senior engineer would flag | +20 |
 | Has ignore comment | -50 |
 
-Apply filters from `@templates/false-positive-rules.md`:
-- Filter issues with score < 70 (lower threshold for deep review)
+If cloud connected, apply memory-based adjustments (see `@templates/false-positive-rules.md#memory-based-scoring`).
+
+**Filtering (lower threshold for deep review):**
+- Filter issues with score < 70
 - Track filtered count by reason
 
 ## Phase 6: Present Results
@@ -134,6 +145,16 @@ Format output using `@templates/output-format.md`:
 - Breaking changes: [yes/no]
 ```
 
+## Phase 7: Sync to Cloud (Optional, Async)
+
+If cloud is connected, sync review results in the background (non-blocking).
+
+Deep review syncs additional data: architecture assessment and impact analysis summaries.
+
+See `@agents/cloud-sync.md` for API details and privacy guarantees.
+
+---
+
 ## Differences from Quick Review
 
 | Aspect | Quick Review | Deep Review |
@@ -144,3 +165,4 @@ Format output using `@templates/output-format.md`:
 | Test Coverage | ❌ | ✅ |
 | Related Files | ❌ | ✅ |
 | Medium Priority | ❌ | ✅ |
+| Cloud Sync Data | Basic | Extended |
