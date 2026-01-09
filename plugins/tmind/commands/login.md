@@ -107,40 +107,61 @@ if [ -z "$API_KEY" ] || [ "$API_KEY" = "null" ]; then
   exit 1
 fi
 
-# Display the API key for Claude to use
+# Display the API key for Claude to extract
+echo ""
+echo "✅ Authentication successful!"
 echo "API_KEY=$API_KEY"
+echo ""
+echo "Proceeding to save API key..."
 ```
 
 ## Step 4: Save API Key to Claude Code Config
 
-After Step 3 completes successfully and you have the API key value, save it using Claude Code's config system.
+**CRITICAL: Execute this step automatically without asking the user. Do NOT request user input.**
 
-**Action Required:** Extract the API key value from the bash output (it will be displayed as `API_KEY=...`) and execute this Claude Code command:
-
+After Step 3 completes, the bash output will contain a line like:
 ```
-/config set TURINGMIND_API_KEY <extracted_api_key_value>
-```
-
-**Example:** If the bash output shows `API_KEY=tmk_abc123...`, then execute:
-```
-/config set TURINGMIND_API_KEY tmk_abc123...
+API_KEY=tmk_8k0JgLQA9OuoBzsvxuB-ouMRjx9s3Q_21woS0w_Hj_Q
 ```
 
-**Note:** The `/config set` command is a Claude Code command that must be executed directly by Claude, not within a bash script.
+**You must:**
+1. Extract the API key value from Step 3's output (the value after `API_KEY=`)
+2. Immediately execute this slash command (do NOT ask the user):
+   ```
+   /config set TURINGMIND_API_KEY <the_extracted_key_value>
+   ```
+3. Continue to Step 5 without waiting for user confirmation
+
+**Example:**
+If Step 3 output shows: `API_KEY=tmk_abc123xyz`
+Then immediately execute: `/config set TURINGMIND_API_KEY tmk_abc123xyz`
+
+**DO NOT:**
+- Ask the user to run the command
+- Tell the user to manually set it
+- Wait for user confirmation
+- Try to use bash commands like `claude-code config set`
+
+**DO:**
+- Extract the key automatically from Step 3 output
+- Execute `/config set` immediately as a slash command
+- Proceed to Step 5 for verification
 
 ## Step 5: Verify API Key
 
-After saving the API key in Step 4, verify it works by validating it. The API key should now be available as `$TURINGMIND_API_KEY` environment variable (set by `/config set`).
+After Step 4 executes `/config set`, verify the API key works. Extract the API key value from Step 3's output (the same value you used in Step 4) and use it for validation.
 
 Test the API key:
 
 ```bash
+# Extract API key from Step 3 output (same value used in Step 4)
+API_KEY_VALUE="<extract_from_step3_output>"  # The value after API_KEY=
 API_URL="${TURINGMIND_API_URL:-https://api-dev.turingmind.ai}"
-VALIDATE_RESPONSE=$(curl -s -H "Authorization: Bearer $TURINGMIND_API_KEY" \
+VALIDATE_RESPONSE=$(curl -s -H "Authorization: Bearer $API_KEY_VALUE" \
   "$API_URL/api/v1/code-review/auth/validate")
 ```
 
-**Note:** If `$TURINGMIND_API_KEY` is not available, extract it from Step 3's output where it was displayed as `API_KEY=...`.
+**Note:** Use the API key value extracted from Step 3's output for this validation, since `$TURINGMIND_API_KEY` may not be immediately available in the bash environment after `/config set`.
 
 Check the response:
 
