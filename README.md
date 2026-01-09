@@ -64,6 +64,9 @@ Open Claude Code in your terminal and run:
 
 # Deep review — thorough analysis before PRs
 /tmind:deep-review
+
+# Login to enable cloud features (optional)
+/tmind:login
 ```
 
 That's it. No config files. No setup. Just code review.
@@ -113,9 +116,17 @@ To uninstall: `rm .git/hooks/pre-push`
 Supercharge your reviews with cloud-powered memory and analytics:
 
 ```bash
-# Get your API key at https://turingmind.ai
+# Easy login flow (recommended)
+/tmind:login
+
+# Or manually set API key
 /config set TURINGMIND_API_KEY tm_sk_your_key_here
 ```
+
+The `/tmind:login` command will:
+1. Open a browser for authentication
+2. Generate and save your API key automatically
+3. Enable cloud features immediately
 
 **What Pro enables:**
 
