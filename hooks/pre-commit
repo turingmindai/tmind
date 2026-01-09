@@ -2,7 +2,7 @@
 
 # TuringMind Code Review - Pre-Commit Hook
 # Version: 1.0.0
-# Runs /turingmind-code-review:review on staged changes before commit
+# Runs /tmind:review on staged changes before commit
 # Blocks commit if Critical severity issues are found
 
 set -e
@@ -40,7 +40,7 @@ fi
 # Run code review with --print flag for non-interactive output
 review_output=$(mktemp)
 
-if claude --print "/turingmind-code-review:review" > "$review_output" 2>&1; then
+if claude --print "/tmind:review" > "$review_output" 2>&1; then
     # Check for Critical severity issues (95-100)
     if grep -qE '🔴|Critical \(95-100\)|CRITICAL' "$review_output"; then
         echo -e "${RED}❌ COMMIT BLOCKED - Critical issues found${NC}"

@@ -31,7 +31,7 @@ if ! command -v claude &> /dev/null; then
 fi
 
 # URL to fetch the hook from GitHub
-HOOK_URL="https://raw.githubusercontent.com/turingmindai/turingmind-code-review/main/hooks/pre-push"
+HOOK_URL="https://raw.githubusercontent.com/turingmindai/tmind/dev/hooks/pre-push"
 
 # Check for existing pre-push hook
 if [ -f ".git/hooks/pre-push" ]; then

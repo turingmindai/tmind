@@ -8,7 +8,7 @@ A [Claude Code](https://docs.anthropic.com/en/docs/claude-code) skill for AI-pow
 
 [![MIT License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Claude Code Skill](https://img.shields.io/badge/Claude_Code-Skill-blueviolet)](https://docs.anthropic.com/en/docs/claude-code)
-[![Install from Marketplace](https://img.shields.io/badge/Marketplace-Install-green)](https://github.com/turingmindai/turingmind-code-review)
+[![Install from Marketplace](https://img.shields.io/badge/Marketplace-Install-green)](https://github.com/turingmindai/tmind)
 
 [Quick Start](#-quick-start) • [Features](#-features) • [Examples](#-example-output) • [Contributing](#-contributing)
 
@@ -48,22 +48,22 @@ Open Claude Code in your terminal and run:
 
 ```bash
 # Step 1: Add the TuringMind marketplace
-/plugin marketplace add turingmindai/turingmind-code-review
+/plugin marketplace add turingmindai/tmind
 ```
 
 ```bash
 # Step 2: Install the skill
-/plugin install turingmind@turingmind
+/plugin install turingmind@tmind
 ```
 
 ### Use the Commands
 
 ```bash
 # Quick review — fast, pre-commit check
-/turingmind-code-review:review
+/tmind:review
 
 # Deep review — thorough analysis before PRs
-/turingmind-code-review:deep-review
+/tmind:deep-review
 ```
 
 That's it. No config files. No setup. Just code review.
@@ -98,7 +98,7 @@ Automatically run code review before every `git push`:
 
 ```bash
 # One-liner install (run in your project)
-curl -sSL https://raw.githubusercontent.com/turingmindai/turingmind-code-review/main/scripts/install-hooks.sh | bash
+curl -sSL https://raw.githubusercontent.com/turingmindai/tmind/dev/scripts/install-hooks.sh | bash
 ```
 
 What it does:
@@ -139,7 +139,7 @@ Supercharge your reviews with cloud-powered memory and analytics:
 
 | | Quick Review | Deep Review |
 |---|---|---|
-| **Command** | `/turingmind-code-review:review` | `/turingmind-code-review:deep-review` |
+| **Command** | `/tmind:review` | `/tmind:deep-review` |
 | **Speed** | ⚡ Fast | 🔍 Thorough |
 | **Best for** | Pre-commit checks | Before PRs |
 | **Agents** | 4 Sonnet | 6 Sonnet + 3 Haiku |

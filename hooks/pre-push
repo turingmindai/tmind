@@ -2,7 +2,7 @@
 
 # TuringMind Code Review - Pre-Push Hook
 # Version: 1.1.0
-# Runs /turingmind-code-review:review on changes before pushing to remote
+# Runs /tmind:review on changes before pushing to remote
 # Blocks push if Critical or High severity issues are found
 
 set -e
@@ -60,7 +60,7 @@ while read local_ref local_sha remote_ref remote_sha; do
     # Run code review with --print flag for non-interactive output
     review_output=$(mktemp)
 
-    if claude --print "/turingmind-code-review:review" > "$review_output" 2>&1; then
+    if claude --print "/tmind:review" > "$review_output" 2>&1; then
         # Check for Critical severity issues (95-100)
         if grep -qE '🔴|Critical \(95-100\)|CRITICAL' "$review_output"; then
             echo -e "${RED}❌ PUSH BLOCKED - Critical issues found${NC}"
