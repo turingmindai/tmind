@@ -1,2 +1,6 @@
 # Ignore zip files (auto-generated skill packages)
 *.zip
+
+# Ignore macOS system files
+.DS_Store
+**/.DS_Store

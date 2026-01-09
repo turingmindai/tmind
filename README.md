@@ -255,7 +255,7 @@ Includes everything above, plus:
 Modular design for easy customization:
 
 ```text
-plugins/turingmind/
+plugins/tmind/
 ├── commands/           # Review orchestration
 │   ├── review.md
 │   └── deep-review.md
