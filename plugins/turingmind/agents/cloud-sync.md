@@ -24,9 +24,13 @@ If not set, cloud features are disabled and reviews run in local-only mode.
 
 ## API Endpoints
 
-Base URL: `https://api.turingmind.ai/api/v1/code-review`
+Base URL: `${TURINGMIND_API_URL:-https://api-dev.turingmind.ai}/api/v1/code-review`
 
-> **Note:** The API is served by the TuringMind backend 
+> **Note:** The API is served by the TuringMind backend (dev environment)
+> 
+> **Override:** Set `TURINGMIND_API_URL` environment variable to use a different endpoint
+> 
+> **Local Testing:** Set `TURINGMIND_API_URL=http://localhost:8000` to test against local backend 
 
 ### Authentication
 
@@ -39,8 +43,9 @@ Content-Type: application/json
 ### 1. Validate API Key
 
 ```bash
+API_URL="${TURINGMIND_API_URL:-https://api-dev.turingmind.ai}"
 curl -s -H "Authorization: Bearer $TURINGMIND_API_KEY" \
-  https://api.turingmind.ai/api/v1/code-review/auth/validate
+  "$API_URL/api/v1/code-review/auth/validate"
 ```
 
 Response:
@@ -66,8 +71,9 @@ Tier values: `free`, `pro`, `team`, `enterprise`
 # Get repo identifier from git remote
 REPO=$(git remote get-url origin 2>/dev/null | sed 's/.*github.com[:/]//' | sed 's/.git$//' || echo "local")
 
+API_URL="${TURINGMIND_API_URL:-https://api-dev.turingmind.ai}"
 curl -s -H "Authorization: Bearer $TURINGMIND_API_KEY" \
-  "https://api.turingmind.ai/api/v1/code-review/context/$REPO"
+  "$API_URL/api/v1/code-review/context/$REPO"
 ```
 
 Response:
@@ -103,9 +109,10 @@ Response:
 ### 3. Sync Review Results
 
 ```bash
+API_URL="${TURINGMIND_API_URL:-https://api-dev.turingmind.ai}"
 curl -X POST -H "Authorization: Bearer $TURINGMIND_API_KEY" \
   -H "Content-Type: application/json" \
-  https://api.turingmind.ai/api/v1/code-review/reviews \
+  "$API_URL/api/v1/code-review/reviews" \
   -d '{
     "review_id": "rev_abc123def456",
     "timestamp": "2026-01-09T12:00:15Z",
@@ -159,9 +166,10 @@ Response:
 ### 4. Send Issue Feedback
 
 ```bash
+API_URL="${TURINGMIND_API_URL:-https://api-dev.turingmind.ai}"
 curl -X POST -H "Authorization: Bearer $TURINGMIND_API_KEY" \
   -H "Content-Type: application/json" \
-  "https://api.turingmind.ai/api/v1/code-review/issues/$ISSUE_ID/feedback" \
+  "$API_URL/api/v1/code-review/issues/$ISSUE_ID/feedback" \
   -d '{
     "action": "fixed",
     "timestamp": "2026-01-09T12:30:00Z",
