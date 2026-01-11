@@ -274,9 +274,8 @@ if [ -n "$PYTHON_CMD" ]; then
     if $PYTHON_CMD -c "import turingmind_mcp" 2>/dev/null; then
         echo "   ✅ Already installed"
     else
-        echo "   Installing..."
+        echo "   Installing from PyPI..."
         $PYTHON_CMD -m pip install turingmind-mcp --quiet 2>/dev/null || \
-        $PYTHON_CMD -m pip install "git+https://github.com/turingmindai/tmind.git#subdirectory=mcp-server" --quiet 2>/dev/null || \
         echo "   ⚠️ Install failed (will use curl fallback)"
     fi
 else

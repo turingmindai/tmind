@@ -58,9 +58,6 @@ else
         if pipx install turingmind-mcp 2>/dev/null; then
             INSTALLED=true
             echo "   ✅ Installed via pipx"
-        elif pipx install "git+https://github.com/turingmindai/tmind.git#subdirectory=mcp-server" 2>/dev/null; then
-            INSTALLED=true
-            echo "   ✅ Installed via pipx (from GitHub)"
         fi
     fi
     
@@ -70,9 +67,6 @@ else
         if $PYTHON_CMD -m pip install --user turingmind-mcp --quiet 2>/dev/null; then
             INSTALLED=true
             echo "   ✅ Installed via pip --user"
-        elif $PYTHON_CMD -m pip install --user "git+https://github.com/turingmindai/tmind.git#subdirectory=mcp-server" --quiet 2>/dev/null; then
-            INSTALLED=true
-            echo "   ✅ Installed via pip --user (from GitHub)"
         fi
     fi
     
