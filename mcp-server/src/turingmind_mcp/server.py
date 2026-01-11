@@ -8,7 +8,10 @@ Provides type-safe tools for Claude to interact with TuringMind cloud:
 - turingmind_get_context: Get memory context for a repository
 
 Run with: turingmind-mcp
-Configure in Claude Desktop: ~/Library/Application Support/Claude/claude_desktop_config.json
+Configure in Claude Desktop config:
+  - macOS: ~/Library/Application Support/Claude/claude_desktop_config.json
+  - Windows: %APPDATA%/Claude/claude_desktop_config.json
+  - Linux: ~/.config/Claude/claude_desktop_config.json
 """
 
 import os

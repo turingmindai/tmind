@@ -210,7 +210,15 @@ fi
 
 # Auto-configure Claude Desktop (if installed)
 if [ "$MCP_INSTALLED" = true ]; then
-    CLAUDE_CONFIG_DIR="$HOME/Library/Application Support/Claude"
+    # Detect OS and set Claude Desktop config path
+    if [[ "$OSTYPE" == "darwin"* ]]; then
+        CLAUDE_CONFIG_DIR="$HOME/Library/Application Support/Claude"
+    elif [[ "$OSTYPE" == "msys" ]] || [[ "$OSTYPE" == "cygwin" ]] || [[ "$OSTYPE" == "win32" ]]; then
+        CLAUDE_CONFIG_DIR="${APPDATA:-$HOME/AppData/Roaming}/Claude"
+    else
+        # Linux and others
+        CLAUDE_CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/Claude"
+    fi
     CLAUDE_CONFIG="$CLAUDE_CONFIG_DIR/claude_desktop_config.json"
     
     # Also save a backup copy
