@@ -1,37 +1,39 @@
 ---
-allowed-tools: Bash(git diff:*), Bash(git status:*), Bash(git log:*), Bash(git blame:*), Bash(git show:*), Bash(curl:*), Bash(~/.turingmind/upload_review.sh:*), turingmind_validate_auth, turingmind_upload_review, turingmind_get_context
+allowed-tools: Bash(git diff:*), Bash(git status:*), Bash(git log:*), Bash(git blame:*), Bash(git show:*), Bash(curl:*), Bash(~/.turingmind/upload_review.sh:*), Read, turingmind_validate_auth, turingmind_upload_review, turingmind_get_context, turingmind_submit_feedback
 description: Quick code review for uncommitted local changes (Cloud Mode)
 ---
 
 Quick code review for uncommitted changes. Fast, focused on critical issues.
 Running in **Cloud Mode** (API key detected).
 
-## Step 0: Initialize TuringMind Cloud
+## Step 0: Fetch Memory Context
 
-Fetch memory context from TuringMind cloud.
+Get memory context from TuringMind cloud to improve review quality.
 
-### Option A: MCP Tool (Preferred)
+### If MCP tools available:
 
 ```
 turingmind_get_context({
-  repo: "owner/repo"  // from git remote
+  repo: "owner/repo"  // extract from: git remote get-url origin
 })
 ```
 
-Returns: open issues, hotspot files, team conventions, false positive patterns.
-
-### Option B: Curl Fallback
+### Fallback (curl):
 
 ```bash
+source ~/.turingmind/config 2>/dev/null
 REPO=$(git remote get-url origin 2>/dev/null | sed 's/.*github.com[:/]//' | sed 's/.git$//' || echo "local")
 curl -s -H "Authorization: Bearer $TURINGMIND_API_KEY" \
   "${TURINGMIND_API_URL:-https://api.turingmind.ai}/api/v1/code-review/context/$REPO"
 ```
 
-- **API details:** See `@agents/cloud-sync.md`
-- **What gets injected:** See `@templates/memory-context.md`
+**What this returns:**
+- Known false positive patterns (skip these)
+- Hotspot files (give extra scrutiny)
+- Team conventions (enforce these)
+- Recent open issues (check if this commit fixes any)
 
-Memory improves reviews by skipping known false positives, flagging hotspot files, and enforcing team conventions.
+Use this context in Steps 3-4 to improve review accuracy. If fetch fails, continue without memory context.
 
 ## Step 1: Gather Context (Haiku Agent)
 
@@ -94,8 +96,8 @@ Score each issue 0-100 using criteria from `@templates/false-positive-rules.md`:
 | In CLAUDE.md rules | +20 |
 | Senior engineer would flag | +20 |
 | Has ignore comment | -50 |
-
-If cloud connected, apply memory-based adjustments (see `@templates/false-positive-rules.md#memory-based-scoring`).
+| In memory's false positive patterns | -40 |
+| In hotspot file | +10 |
 
 **Filtering:**
 - Filter issues with score < 80
@@ -128,48 +130,37 @@ Format output using `@templates/output-format.md`:
 
 Upload review results to TuringMind cloud for analytics and memory.
 
-### Option A: MCP Tool (Preferred)
-
-If TuringMind MCP server is configured, use the type-safe `turingmind_upload_review` tool:
+### If MCP tools available:
 
 ```
 turingmind_upload_review({
-  repo: "owner/repo",           // from git remote
-  branch: "feature/branch",     // from git branch
-  commit: "abc123",             // from git rev-parse
+  repo: "owner/repo",
+  branch: "feature/branch",
+  commit: "abc123",
   review_type: "quick",
   issues: [
     {
-      title: "Issue title from Steps 3-4",
-      severity: "critical|high|medium|low",
-      category: "security|bug|compliance",
+      title: "Issue title",
+      severity: "critical",
+      category: "security",
       file: "path/to/file.ts",
       line: 42,
       description: "Detailed explanation",
       confidence: 95
     }
   ],
-  summary: {
-    critical: 0,    // count from your analysis
-    high: 1,
-    medium: 2,
-    low: 0
-  }
+  summary: { critical: 0, high: 1, medium: 2, low: 0 }
 })
 ```
 
-### Option B: Curl Fallback
-
-If MCP is not available, use curl directly:
+### Fallback (curl):
 
 ```bash
-# Get repo info
+source ~/.turingmind/config 2>/dev/null
 REPO=$(git remote get-url origin 2>/dev/null | sed 's/.*github.com[:/]//' | sed 's/.git$//' || basename "$(pwd)")
 BRANCH=$(git branch --show-current 2>/dev/null || echo "main")
 COMMIT=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")
 
-# Upload (field aliases supported: findings→issues, results→issues)
-source ~/.turingmind/config 2>/dev/null
 curl -s -X POST "${TURINGMIND_API_URL:-https://api.turingmind.ai}/api/v1/code-review/reviews" \
   -H "Authorization: Bearer $TURINGMIND_API_KEY" \
   -H "Content-Type: application/json" \
@@ -180,9 +171,15 @@ curl -s -X POST "${TURINGMIND_API_URL:-https://api.turingmind.ai}/api/v1/code-re
   }"
 ```
 
-### Notes
+Or use the helper script:
+```bash
+~/.turingmind/upload_review.sh "$REVIEW_JSON"
+```
 
-- MCP provides type-safe schema validation before sending
-- Curl fallback works everywhere but is more error-prone
-- If upload fails, the review is still valid locally
-- Cloud sync is optional but enables memory features
+**Benefits of uploading:**
+- Builds memory for future reviews
+- Tracks metrics over time
+- Enables dashboard analytics
+- Syncs false positives across team
+
+If upload fails, the review is still valid locally.

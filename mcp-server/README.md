@@ -1,6 +1,6 @@
 # TuringMind MCP Server
 
-Model Context Protocol (MCP) server for TuringMind cloud integration. Provides type-safe tools for Claude to upload code reviews and fetch repository context.
+Model Context Protocol (MCP) server for TuringMind cloud integration. Provides type-safe tools for Claude to authenticate, upload code reviews, fetch repository context, and submit feedback.
 
 > **Requires Python 3.10+** (MCP SDK requirement)
 
@@ -12,6 +12,7 @@ Instead of Claude generating raw JSON and curl commands (which can fail silently
 - **Validated input** - Errors caught before sending
 - **No endpoint guessing** - Correct URL hardcoded
 - **Better error messages** - Clear feedback on failures
+- **Simplified login** - Device code flow handled by the server
 
 ## Installation
 
@@ -79,6 +80,34 @@ The server reads the API key from:
 
 ## Available Tools
 
+### `turingmind_initiate_login`
+
+Start device code authentication flow. No API key required.
+
+```
+No parameters required
+```
+
+**Returns:**
+- `verification_url` - URL to open in browser
+- `user_code` - Code to enter when prompted
+- `device_code` - Use this with `turingmind_poll_login`
+
+### `turingmind_poll_login`
+
+Poll for authentication completion. No API key required.
+
+**Parameters:**
+
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| `device_code` | string | ✅ | Device code from `turingmind_initiate_login` |
+
+**Returns:**
+- On success: API key (automatically saved to `~/.turingmind/config`)
+- On pending: Status message to wait and retry
+- On expired: Error message to restart flow
+
 ### `turingmind_validate_auth`
 
 Validate API key and get account info.
@@ -140,9 +169,57 @@ Get memory context for a repository.
 - Team conventions
 - Known false positive patterns
 
+### `turingmind_submit_feedback`
+
+Submit feedback on a code review issue (fixed, dismissed, or false positive).
+
+**Parameters:**
+
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| `issue_id` | string | ✅ | Issue ID (e.g., `iss_abc123`) |
+| `action` | string | ✅ | One of: `fixed`, `dismissed`, `false_positive` |
+| `repo` | string | ✅ | Repository (owner/repo) |
+| `file` | string | | File path where issue was found |
+| `line` | integer | | Line number of the issue |
+| `pattern` | string | | For false_positive: pattern to skip in future |
+| `reason` | string | | Explanation for the feedback |
+
+**Actions:**
+- `fixed` — Issue was resolved (tracks time-to-fix metrics)
+- `dismissed` — Issue isn't important (lowers future priority)
+- `false_positive` — Not a real issue (adds pattern to memory for future skipping)
+
 ## Usage in Claude
 
-Once configured, Claude will automatically have access to these tools:
+Once configured, Claude will automatically have access to these tools.
+
+### Login Flow (First Time)
+
+```
+User: Log me into TuringMind
+
+Claude: I'll start the authentication flow.
+
+[Calls turingmind_initiate_login]
+🧠 TuringMind Login Started
+
+Step 1: Open this URL in your browser:
+https://app.turingmind.ai/device
+
+Step 2: Enter this code when prompted:
+ABCD-1234
+
+Step 3: After completing authentication, call turingmind_poll_login
+
+User: Done, I entered the code
+
+Claude: [Calls turingmind_poll_login with device_code]
+✅ Login Successful!
+API key has been saved to ~/.turingmind/config
+```
+
+### Review Flow
 
 ```
 User: Review my code changes and upload to TuringMind
@@ -160,6 +237,20 @@ Claude: I'll validate authentication first, then review and upload.
 🧠 Review Uploaded to TuringMind
 - Review ID: rev_abc123
 - Issues: 3
+```
+
+### Feedback Flow
+
+```
+User: That SQL injection issue was a false positive, we use parameterized queries
+
+Claude: I'll mark it as a false positive so we skip similar patterns.
+
+[Calls turingmind_submit_feedback]
+🚫 Feedback Submitted
+Issue iss_abc123 has been marked as false positive.
+Pattern saved: `db.query(sql, params)`
+This pattern will be skipped in future reviews.
 ```
 
 ## Development

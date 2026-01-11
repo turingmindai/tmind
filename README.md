@@ -56,6 +56,16 @@ Open Claude Code in your terminal and run:
 /plugin install turingmind@tmind
 ```
 
+```bash
+# Step 3: One-time setup (installs MCP server)
+/tmind:setup
+```
+
+```bash
+# Step 4: Restart Claude, then login
+/tmind:login
+```
+
 ### Use the Commands
 
 ```bash
@@ -64,12 +74,9 @@ Open Claude Code in your terminal and run:
 
 # Deep review — thorough analysis before PRs
 /tmind:deep-review
-
-# Login to enable cloud features (optional)
-/tmind:login
 ```
 
-That's it. No config files. No setup. Just code review.
+That's it. Reviews work locally. Cloud features (memory, analytics) require login.
 
 ### Requirements
 
@@ -269,13 +276,14 @@ Modular design for easy customization:
 plugins/tmind/
 ├── commands/           # Review orchestration
 │   ├── review.md
-│   └── deep-review.md
+│   ├── deep-review.md
+│   ├── login.md
+│   └── setup.md        # One-time MCP setup
 ├── agents/             # Specialized reviewers
 │   ├── bugs.md
 │   ├── security.md
 │   ├── compliance.md
 │   ├── architecture.md
-│   ├── cloud-sync.md   # TuringMind Pro integration
 │   ├── index.md        # Agent router
 │   └── language-*.md
 └── templates/          # Output & filtering

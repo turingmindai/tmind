@@ -1,7 +1,7 @@
 [project]
 name = "turingmind-mcp"
-version = "0.1.0"
-description = "MCP server for TuringMind cloud sync - provides type-safe tools for code review uploads"
+version = "0.2.0"
+description = "MCP server for TuringMind cloud sync - provides type-safe tools for authentication, code review uploads, and feedback"
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.10"

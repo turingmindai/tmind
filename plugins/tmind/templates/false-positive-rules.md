@@ -85,5 +85,5 @@ When cloud is connected (`TURINGMIND_API_KEY` set), apply additional adjustments
 | Violates team convention | +15 | Explicit team rule |
 | Issue already open at this location | Skip | Avoid duplicates |
 
-See `@agents/cloud-sync.md` for how memory context is fetched.
+Memory context is fetched via the `turingmind_get_context()` MCP tool.
 
