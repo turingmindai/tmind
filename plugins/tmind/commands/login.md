@@ -163,76 +163,50 @@ chmod +x ~/.turingmind/upload_review.sh
 
 # STEP 4b: Install MCP Server (if Python 3.10+ available)
 MCP_INSTALLED=false
+PYTHON_CMD=""
 
-# Try to find tmind mcp-server directory in common locations
-# Priority: env var > workspace > home > common dev paths
-for MCP_PATH in \
-    "${TMIND_MCP_PATH:-}" \
-    "$HOME/.tmind/mcp-server" \
-    "$(pwd)/mcp-server" \
-    "$HOME/Documents/VSCodeProjects/tmind/mcp-server" \
-    "$HOME/projects/tmind/mcp-server" \
-    "$HOME/code/tmind/mcp-server"; do
-    [ -z "$MCP_PATH" ] && continue
-    if [ -d "$MCP_PATH" ] && [ -f "$MCP_PATH/pyproject.toml" ]; then
-        echo ""
-        echo "📦 Found MCP server at: $MCP_PATH"
-        
-        # Check Python version (MCP requires 3.10+)
-        # First, check if any Python 3.10+ already has turingmind_mcp installed
-        PYTHON_CMD=""
-        INSTALL_PYTHON=""
-        
-        for cmd in python3.12 python3.11 python3.10 python3; do
-            if command -v $cmd &> /dev/null; then
-                # Check if version is 3.10+
-                if $cmd -c 'import sys; exit(0 if sys.version_info >= (3, 10) else 1)' 2>/dev/null; then
-                    # Save first valid Python for potential install
-                    [ -z "$INSTALL_PYTHON" ] && INSTALL_PYTHON=$cmd
-                    
-                    # Check if this Python has MCP already installed
-                    if $cmd -c "import turingmind_mcp" 2>/dev/null; then
-                        PYTHON_CMD=$cmd
-                        break
-                    fi
-                fi
-            fi
-        done
-        
-        # If no Python has MCP installed, use the first valid one for installation
-        [ -z "$PYTHON_CMD" ] && PYTHON_CMD="$INSTALL_PYTHON"
-        
-        if [ -n "$PYTHON_CMD" ]; then
-            echo "   Using $PYTHON_CMD (version $($PYTHON_CMD --version 2>&1 | cut -d' ' -f2))"
-            
-            # Check if already installed
-            if $PYTHON_CMD -c "import turingmind_mcp" 2>/dev/null; then
-                echo "   ✅ MCP server already installed"
-                MCP_INSTALLED=true
-            else
-                echo "   Installing MCP server..."
-                if $PYTHON_CMD -m pip install -e "$MCP_PATH" --quiet 2>/dev/null; then
-                    MCP_INSTALLED=true
-                    echo "   ✅ MCP server installed"
-                elif $PYTHON_CMD -m pip install --user -e "$MCP_PATH" --quiet 2>/dev/null; then
-                    MCP_INSTALLED=true
-                    echo "   ✅ MCP server installed (user)"
-                else
-                    echo "   ⚠️ MCP install failed (will use curl fallback)"
-                fi
-            fi
-            
-            # Save MCP config if installed
-            if [ "$MCP_INSTALLED" = true ]; then
-                echo "TURINGMIND_MCP_PATH=$MCP_PATH" >> ~/.turingmind/config
-                echo "TURINGMIND_PYTHON=$PYTHON_CMD" >> ~/.turingmind/config
-            fi
-        else
-            echo "   ⚠️ Python 3.10+ not found (MCP requires it, will use curl fallback)"
+# Find Python 3.10+ (required for MCP)
+for cmd in python3.12 python3.11 python3.10 python3; do
+    if command -v $cmd &> /dev/null; then
+        if $cmd -c 'import sys; exit(0 if sys.version_info >= (3, 10) else 1)' 2>/dev/null; then
+            PYTHON_CMD=$cmd
+            break
         fi
-        break
     fi
 done
+
+if [ -n "$PYTHON_CMD" ]; then
+    echo ""
+    echo "📦 Installing MCP server (Python $($PYTHON_CMD --version 2>&1 | cut -d' ' -f2))..."
+    
+    # Check if already installed
+    if $PYTHON_CMD -c "import turingmind_mcp" 2>/dev/null; then
+        echo "   ✅ MCP server already installed"
+        MCP_INSTALLED=true
+    else
+        # Try PyPI first (when published), fallback to GitHub
+        if $PYTHON_CMD -m pip install turingmind-mcp --quiet 2>/dev/null; then
+            MCP_INSTALLED=true
+            echo "   ✅ MCP server installed from PyPI"
+        elif $PYTHON_CMD -m pip install "git+https://github.com/turingmindai/tmind.git#subdirectory=mcp-server" --quiet 2>/dev/null; then
+            MCP_INSTALLED=true
+            echo "   ✅ MCP server installed from GitHub"
+        elif $PYTHON_CMD -m pip install --user "git+https://github.com/turingmindai/tmind.git#subdirectory=mcp-server" --quiet 2>/dev/null; then
+            MCP_INSTALLED=true
+            echo "   ✅ MCP server installed from GitHub (user)"
+        else
+            echo "   ⚠️ MCP install failed (will use curl fallback)"
+        fi
+    fi
+    
+    # Save MCP config if installed
+    if [ "$MCP_INSTALLED" = true ]; then
+        echo "TURINGMIND_PYTHON=$PYTHON_CMD" >> ~/.turingmind/config
+    fi
+else
+    echo ""
+    echo "⚠️ Python 3.10+ not found (MCP requires it, will use curl fallback)"
+fi
 
 # Auto-configure Claude Desktop (if installed)
 if [ "$MCP_INSTALLED" = true ]; then
