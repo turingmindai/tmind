@@ -53,7 +53,7 @@ If not set, cloud features are disabled and reviews run in local-only mode.
 
 ## API Endpoints
 
-Base URL: `${TURINGMIND_API_URL:-http://localhost:3000}/api/v1/code-review`
+Base URL: `${TURINGMIND_API_URL:-https://api.turingmind.ai}/api/v1/code-review`
 
 > **Note:** Default is localhost for local development
 > 
@@ -70,7 +70,7 @@ Content-Type: application/json
 ### 1. Validate API Key
 
 ```bash
-API_URL="${TURINGMIND_API_URL:-http://localhost:3000}"
+API_URL="${TURINGMIND_API_URL:-https://api.turingmind.ai}"
 curl -s -H "Authorization: Bearer $TURINGMIND_API_KEY" \
   "$API_URL/api/v1/code-review/auth/validate"
 ```
@@ -98,7 +98,7 @@ Tier values: `free`, `pro`, `team`, `enterprise`
 # Get repo identifier from git remote
 REPO=$(git remote get-url origin 2>/dev/null | sed 's/.*github.com[:/]//' | sed 's/.git$//' || echo "local")
 
-API_URL="${TURINGMIND_API_URL:-http://localhost:3000}"
+API_URL="${TURINGMIND_API_URL:-https://api.turingmind.ai}"
 curl -s -H "Authorization: Bearer $TURINGMIND_API_KEY" \
   "$API_URL/api/v1/code-review/context/$REPO"
 ```
@@ -143,7 +143,7 @@ The schema is flexible - only `context.repo` is required. All other fields are o
 
 ```bash
 source ~/.turingmind/config
-curl -s -X POST "${TURINGMIND_API_URL:-http://localhost:3000}/api/v1/code-review/reviews" \
+curl -s -X POST "${TURINGMIND_API_URL:-https://api.turingmind.ai}/api/v1/code-review/reviews" \
   -H "Authorization: Bearer $TURINGMIND_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
@@ -161,7 +161,7 @@ curl -s -X POST "${TURINGMIND_API_URL:-http://localhost:3000}/api/v1/code-review
 #### Full Upload (Optional structured data)
 
 ```bash
-curl -s -X POST "${TURINGMIND_API_URL:-http://localhost:3000}/api/v1/code-review/reviews" \
+curl -s -X POST "${TURINGMIND_API_URL:-https://api.turingmind.ai}/api/v1/code-review/reviews" \
   -H "Authorization: Bearer $TURINGMIND_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
@@ -185,7 +185,7 @@ Response:
 ### 4. Send Issue Feedback
 
 ```bash
-API_URL="${TURINGMIND_API_URL:-http://localhost:3000}"
+API_URL="${TURINGMIND_API_URL:-https://api.turingmind.ai}"
 curl -X POST -H "Authorization: Bearer $TURINGMIND_API_KEY" \
   -H "Content-Type: application/json" \
   "$API_URL/api/v1/code-review/issues/$ISSUE_ID/feedback" \

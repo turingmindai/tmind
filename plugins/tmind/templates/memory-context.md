@@ -51,7 +51,7 @@ When TuringMind cloud is connected, inject this context into review agents.
 # Check if TURINGMIND_API_KEY environment variable is set
 if [ -n "$TURINGMIND_API_KEY" ] && [ "$TURINGMIND_API_KEY" != "" ]; then
   REPO=$(git remote get-url origin 2>/dev/null | sed 's/.*github.com[:/]//' | sed 's/.git$//' || echo "local")
-  API_URL="${TURINGMIND_API_URL:-http://localhost:3000}"
+  API_URL="${TURINGMIND_API_URL:-https://api.turingmind.ai}"
   MEMORY=$(curl -s -H "Authorization: Bearer $TURINGMIND_API_KEY" \
     "$API_URL/api/v1/code-review/context/$REPO")
   

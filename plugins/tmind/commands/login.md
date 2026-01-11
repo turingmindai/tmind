@@ -13,8 +13,8 @@ Execute the following script to log in:
 #!/bin/bash
 set -e
 
-# Default API URL
-API_URL="http://localhost:3000"
+# Default API URL (production by default, override with TURINGMIND_API_URL env var)
+API_URL="${TURINGMIND_API_URL:-https://api.turingmind.ai}"
 
 # Check for curl
 if ! command -v curl &> /dev/null; then
@@ -120,7 +120,7 @@ cat > ~/.turingmind/upload_review.sh << 'UPLOAD_SCRIPT'
 # TuringMind Review Upload Script
 # Flexible schema - only context.repo is required
 
-API_URL="${TURINGMIND_API_URL:-http://localhost:3000}"
+API_URL="${TURINGMIND_API_URL:-https://api.turingmind.ai}"
 
 # Source config if not already set
 [ -z "$TURINGMIND_API_KEY" ] && [ -f ~/.turingmind/config ] && source ~/.turingmind/config
@@ -369,8 +369,8 @@ Login to TuringMind using device code flow to get your API key for cloud feature
 Call the backend to initiate device code authentication:
 
 ```bash
-API_URL="http://localhost:3000"
-echo "DEBUG: Hardcoded for local testing: $API_URL"
+API_URL="${TURINGMIND_API_URL:-https://api.turingmind.ai}"
+echo "DEBUG: Using API URL: $API_URL"
 AUTH_RESPONSE=$(curl -s "$API_URL/api/v1/cli/auth")
 ```
 
@@ -575,13 +575,13 @@ After Step 4 exports the environment variable and saves to config, verify the AP
 Test the API key:
 
 ```bash
-# Hardcoded for local testing
-API_URL="http://localhost:3000"
+# Use configured URL (defaults to production)
+API_URL="${TURINGMIND_API_URL:-https://api.turingmind.ai}"
 VALIDATE_RESPONSE=$(curl -s -H "Authorization: Bearer $TURINGMIND_API_KEY" \
   "$API_URL/api/v1/code-review/auth/validate")
 ```
 
-**Note:** The API URL defaults to `http://localhost:3000` for local development. Set `TURINGMIND_API_URL` environment variable to override.
+**Note:** The API URL defaults to `https://api.turingmind.ai` (production). For local development, set `export TURINGMIND_API_URL=http://localhost:3000`.
 
 **Note:** Since Step 4 exported `TURINGMIND_API_KEY` as an environment variable, it should be available for use in this step.
 

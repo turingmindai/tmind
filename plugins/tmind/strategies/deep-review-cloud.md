@@ -25,7 +25,7 @@ Returns: open issues, hotspot files, team conventions, false positive patterns.
 ```bash
 REPO=$(git remote get-url origin 2>/dev/null | sed 's/.*github.com[:/]//' | sed 's/.git$//' || echo "local")
 curl -s -H "Authorization: Bearer $TURINGMIND_API_KEY" \
-  "${TURINGMIND_API_URL:-http://localhost:3000}/api/v1/code-review/context/$REPO"
+  "${TURINGMIND_API_URL:-https://api.turingmind.ai}/api/v1/code-review/context/$REPO"
 ```
 
 - **API details:** See `@agents/cloud-sync.md`
@@ -212,7 +212,7 @@ COMMIT=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")
 
 # Upload (field aliases supported: findings→issues, results→issues)
 source ~/.turingmind/config 2>/dev/null
-curl -s -X POST "${TURINGMIND_API_URL:-http://localhost:3000}/api/v1/code-review/reviews" \
+curl -s -X POST "${TURINGMIND_API_URL:-https://api.turingmind.ai}/api/v1/code-review/reviews" \
   -H "Authorization: Bearer $TURINGMIND_API_KEY" \
   -H "Content-Type: application/json" \
   -d "{
