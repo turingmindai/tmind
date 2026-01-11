@@ -172,8 +172,7 @@ for MCP_PATH in \
     "$(pwd)/mcp-server" \
     "$HOME/Documents/VSCodeProjects/tmind/mcp-server" \
     "$HOME/projects/tmind/mcp-server" \
-    "$HOME/code/tmind/mcp-server" \
-    "/Users/turingmindai/Documents/VSCodeProjects/tmind/mcp-server"; do
+    "$HOME/code/tmind/mcp-server"; do
     [ -z "$MCP_PATH" ] && continue
     if [ -d "$MCP_PATH" ] && [ -f "$MCP_PATH/pyproject.toml" ]; then
         echo ""
