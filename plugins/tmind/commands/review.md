@@ -1,214 +1,49 @@
 ---
-allowed-tools: Bash(git diff:*), Bash(git status:*), Bash(git log:*), Bash(git blame:*), Bash(git show:*), Bash(curl:*), Bash(~/.turingmind/upload_review.sh:*), Read, turingmind_validate_auth, turingmind_upload_review, turingmind_get_context, turingmind_submit_feedback
+allowed-tools: Bash, Read
 description: Quick code review for uncommitted local changes
 ---
 
-Quick code review for uncommitted changes. Fast, focused on critical issues.
+This command routes to the appropriate strategy based on your cloud connection status.
 
-## Step 0: Detect Mode & Fetch Context
+## Step 1: Detect Mode & Find Strategy
 
 ```bash
-# Load API key from config file
+# Load API key from config file (persists across sessions)
 [ -f ~/.turingmind/config ] && source ~/.turingmind/config
 
 if [ -n "$TURINGMIND_API_KEY" ] && [ "$TURINGMIND_API_KEY" != "" ]; then
   echo "☁️  Cloud Mode (API key detected)"
   echo "MODE=cloud"
+  STRATEGY_FILE="review-cloud.md"
 else
   echo "💻 Local Mode (no API key)"
   echo "MODE=local"
   echo "Run /tmind:login to enable cloud features."
+  STRATEGY_FILE="review-local.md"
+fi
+
+# Find the strategy file in plugin cache
+STRATEGY_PATH=$(find ~/.claude/plugins/cache -name "$STRATEGY_FILE" -path "*tmind*" 2>/dev/null | head -1)
+
+if [ -n "$STRATEGY_PATH" ]; then
+  echo "STRATEGY_PATH=$STRATEGY_PATH"
+else
+  echo "⚠️ Strategy file not found in plugin cache"
 fi
 ```
 
-### Cloud Mode Only: Fetch Memory Context
+## Step 2: Execute Strategy
 
-If `MODE=cloud`, get memory context from TuringMind cloud to improve review quality.
+Read and execute the strategy file found above. The strategy file contains the full review workflow including:
+- Fetching memory context (cloud only)
+- Running review agents
+- Scoring and filtering issues
+- Presenting results
+- Uploading to cloud (cloud only)
 
-**If MCP tools available:**
+**Execute the strategy by reading the file at STRATEGY_PATH:**
 
-```
-turingmind_get_context({
-  repo: "owner/repo"  // extract from: git remote get-url origin
-})
-```
+- If `MODE=cloud`: Read `~/.claude/plugins/cache/tmind/tmind/*/strategies/review-cloud.md`
+- If `MODE=local`: Read `~/.claude/plugins/cache/tmind/tmind/*/strategies/review-local.md`
 
-**Fallback (curl):**
-
-```bash
-source ~/.turingmind/config 2>/dev/null
-REPO=$(git remote get-url origin 2>/dev/null | sed 's/.*github.com[:/]//' | sed 's/.git$//' || echo "local")
-curl -s -H "Authorization: Bearer $TURINGMIND_API_KEY" \
-  "${TURINGMIND_API_URL:-https://api.turingmind.ai}/api/v1/code-review/context/$REPO"
-```
-
-**What memory context provides:**
-- Known false positive patterns (skip these)
-- Hotspot files (give extra scrutiny)
-- Team conventions (enforce these)
-- Recent open issues (check if this commit fixes any)
-
-Use this context in Steps 3-4 to improve review accuracy. If fetch fails, continue without memory context.
-
----
-
-## Step 1: Gather Context (Haiku Agent)
-
-Detect what needs to be reviewed:
-
-```
-1. Run `git status` and `git diff` / `git diff --staged`
-2. If no changes → inform user and stop
-3. Extract:
-   - Files changed (list)
-   - Languages detected (from extensions)
-   - Line counts (additions/deletions)
-   - Has CLAUDE.md? (root or in changed directories)
-```
-
-## Step 2: Load Agents (Progressive)
-
-Only load agents relevant to detected context:
-
-| Condition | Load Agent |
-|-----------|------------|
-| Always | `@agents/bugs.md` |
-| Always | `@agents/security.md` |
-| CLAUDE.md exists | `@agents/compliance.md` |
-| `.ts/.tsx/.js/.jsx` files | `@agents/language-typescript.md` |
-| `.py` files | `@agents/language-python.md` |
-
-See `@agents/index.md` for full routing logic.
-
-## Step 3: Run Review (Parallel Sonnet Agents)
-
-Launch loaded agents in parallel. Each agent:
-1. Reads full file context for changed files
-2. Analyzes only the diff (not pre-existing code)
-3. Returns structured issues with **diff-style fixes**
-
-Output format per agent (see `@agents/bugs.md` for example):
-```markdown
-### 🐛 {{issue_title}}
-**Location:** `{{file}}:{{line}}`
-**Confidence:** {{score}}/100
-
-**Problem:** {{reason}}
-
-**Suggested Fix:**
-```diff
-- {{old_code}}
-+ {{new_code}}
-```
-```
-
-## Step 4: Score & Filter (Haiku Agents)
-
-Score each issue 0-100 using criteria from `@templates/false-positive-rules.md`:
-
-| Factor | Points |
-|--------|--------|
-| In the diff (new code) | +20 |
-| Would cause failure | +30 |
-| In CLAUDE.md rules | +20 |
-| Senior engineer would flag | +20 |
-| Has ignore comment | -50 |
-| In memory's false positive patterns (cloud only) | -40 |
-| In hotspot file (cloud only) | +10 |
-
-**Filtering:**
-- Filter issues with score < 80
-- Track filtered count by reason
-
-## Step 5: Present Results
-
-Format output using `@templates/output-format.md`:
-
-```
-## Code Review
-
-**Summary:** Reviewed X files, Y lines changed
-
-| Found | Reported | Filtered |
-|-------|----------|----------|
-| total | ≥80 score | <80 score |
-
-### Critical (95-100) 🔴
-[Issues with diff-style fixes]
-
-### Warning (80-94) 🟠  
-[Issues with diff-style fixes]
-
-### Filtered Issues 🔇
-[Count by reason, expandable details]
-```
-
----
-
-## Step 6: Upload to Cloud (Cloud Mode Only)
-
-If `MODE=cloud`, upload review results to TuringMind cloud for analytics and memory.
-
-**If MCP tools available:**
-
-```
-turingmind_upload_review({
-  repo: "owner/repo",
-  branch: "feature/branch",
-  commit: "abc123",
-  review_type: "quick",
-  issues: [
-    {
-      title: "Issue title",
-      severity: "critical",
-      category: "security",
-      file: "path/to/file.ts",
-      line: 42,
-      description: "Detailed explanation",
-      confidence: 95
-    }
-  ],
-  summary: { critical: 0, high: 1, medium: 2, low: 0 }
-})
-```
-
-**Fallback (curl):**
-
-```bash
-source ~/.turingmind/config 2>/dev/null
-REPO=$(git remote get-url origin 2>/dev/null | sed 's/.*github.com[:/]//' | sed 's/.git$//' || basename "$(pwd)")
-BRANCH=$(git branch --show-current 2>/dev/null || echo "main")
-COMMIT=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")
-
-curl -s -X POST "${TURINGMIND_API_URL:-https://api.turingmind.ai}/api/v1/code-review/reviews" \
-  -H "Authorization: Bearer $TURINGMIND_API_KEY" \
-  -H "Content-Type: application/json" \
-  -d "{
-    \"context\": {\"repo\": \"$REPO\", \"branch\": \"$BRANCH\", \"commit\": \"$COMMIT\", \"review_type\": \"quick\"},
-    \"issues\": [...],
-    \"summary\": {\"critical\": 0, \"high\": 1, \"medium\": 2, \"low\": 0}
-  }"
-```
-
-Or use the helper script:
-```bash
-~/.turingmind/upload_review.sh "$REVIEW_JSON"
-```
-
-**Benefits of uploading:**
-- Builds memory for future reviews
-- Tracks metrics over time
-- Enables dashboard analytics
-- Syncs false positives across team
-
-If upload fails, the review is still valid locally.
-
----
-
-## Output Rules
-
-- **Always** include filtered issues summary (builds trust)
-- **Always** use diff-style fixes (actionable)
-- **Never** report pre-existing issues (not in diff)
-- **Never** report linter territory (ESLint will catch)
-- If no issues found, confirm code looks good for commit
+**Important:** After reading the strategy file, execute ALL steps in it including the final upload step.
