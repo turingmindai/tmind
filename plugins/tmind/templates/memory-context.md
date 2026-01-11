@@ -48,12 +48,22 @@ When TuringMind cloud is connected, inject this context into review agents.
 ### Step 1: Fetch Context
 
 ```bash
-# Only if TURINGMIND_API_KEY is set
-if [ -n "$TURINGMIND_API_KEY" ]; then
+# Check if TURINGMIND_API_KEY environment variable is set
+if [ -n "$TURINGMIND_API_KEY" ] && [ "$TURINGMIND_API_KEY" != "" ]; then
   REPO=$(git remote get-url origin 2>/dev/null | sed 's/.*github.com[:/]//' | sed 's/.git$//' || echo "local")
-  API_URL="${TURINGMIND_API_URL:-https://api-dev.turingmind.ai}"
+  API_URL="${TURINGMIND_API_URL:-http://localhost:3000}"
   MEMORY=$(curl -s -H "Authorization: Bearer $TURINGMIND_API_KEY" \
     "$API_URL/api/v1/code-review/context/$REPO")
+  
+  # Check if we got valid memory data
+  if echo "$MEMORY" | grep -q '"repo"'; then
+    echo "✅ Memory context loaded from TuringMind cloud"
+  else
+    echo "⚠️  Memory context unavailable (API key may be invalid)"
+  fi
+else
+  echo "ℹ️  TURINGMIND_API_KEY not set - running in local mode"
+  echo "   To enable: Run /tmind:login"
 fi
 ```
 

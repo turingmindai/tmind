@@ -11,26 +11,53 @@ This agent handles communication with the TuringMind cloud API for:
 - Syncing review results (issues found, metrics)
 - Tracking issue feedback (fixed, dismissed, false positive)
 
-## Prerequisites
+## Preferred Method: MCP Tools
+
+If the TuringMind MCP server is configured, use these type-safe tools:
+
+| Tool | Purpose |
+|------|---------|
+| `turingmind_validate_auth` | Check API key, get account info |
+| `turingmind_upload_review` | Upload review results (type-safe schema) |
+| `turingmind_get_context` | Fetch memory context for a repo |
+
+MCP advantages:
+- Type-safe input validation before sending
+- No field name mismatches (`findings` vs `issues`)
+- Clear error messages
+- Schema enforced by tool definition
+
+See `tmind/mcp-server/README.md` for installation.
+
+## Fallback Method: REST API
+
+If MCP is not available, use the REST API directly.
+
+### Prerequisites
 
 Requires `TURINGMIND_API_KEY` environment variable to be set.
 
 ```bash
 # Check if API key is configured
-echo $TURINGMIND_API_KEY
+if [ -z "$TURINGMIND_API_KEY" ]; then
+  echo "TURINGMIND_API_KEY not set - cloud features disabled"
+  echo "To enable: Run /tmind:login to authenticate and set your API key"
+fi
 ```
+
+**Setting the API key:**
+- Run `/tmind:login` - this will export the API key for the current session
+- Or manually: `export TURINGMIND_API_KEY=your_key_here`
 
 If not set, cloud features are disabled and reviews run in local-only mode.
 
 ## API Endpoints
 
-Base URL: `${TURINGMIND_API_URL:-https://api-dev.turingmind.ai}/api/v1/code-review`
+Base URL: `${TURINGMIND_API_URL:-http://localhost:3000}/api/v1/code-review`
 
-> **Note:** The API is served by the TuringMind backend (dev environment)
+> **Note:** Default is localhost for local development
 > 
-> **Override:** Set `TURINGMIND_API_URL` environment variable to use a different endpoint
-> 
-> **Local Testing:** Set `TURINGMIND_API_URL=http://localhost:8000` to test against local backend 
+> **Override:** Set `TURINGMIND_API_URL` environment variable to use a different endpoint 
 
 ### Authentication
 
@@ -43,7 +70,7 @@ Content-Type: application/json
 ### 1. Validate API Key
 
 ```bash
-API_URL="${TURINGMIND_API_URL:-https://api-dev.turingmind.ai}"
+API_URL="${TURINGMIND_API_URL:-http://localhost:3000}"
 curl -s -H "Authorization: Bearer $TURINGMIND_API_KEY" \
   "$API_URL/api/v1/code-review/auth/validate"
 ```
@@ -71,7 +98,7 @@ Tier values: `free`, `pro`, `team`, `enterprise`
 # Get repo identifier from git remote
 REPO=$(git remote get-url origin 2>/dev/null | sed 's/.*github.com[:/]//' | sed 's/.git$//' || echo "local")
 
-API_URL="${TURINGMIND_API_URL:-https://api-dev.turingmind.ai}"
+API_URL="${TURINGMIND_API_URL:-http://localhost:3000}"
 curl -s -H "Authorization: Bearer $TURINGMIND_API_KEY" \
   "$API_URL/api/v1/code-review/context/$REPO"
 ```
@@ -106,50 +133,43 @@ Response:
 }
 ```
 
-### 3. Sync Review Results
+### 3. Upload Review Results
+
+**Endpoint:** `POST /api/v1/code-review/reviews`
+
+The schema is flexible - only `context.repo` is required. All other fields are optional.
+
+#### Minimal Upload (Recommended)
 
 ```bash
-API_URL="${TURINGMIND_API_URL:-https://api-dev.turingmind.ai}"
-curl -X POST -H "Authorization: Bearer $TURINGMIND_API_KEY" \
+source ~/.turingmind/config
+curl -s -X POST "${TURINGMIND_API_URL:-http://localhost:3000}/api/v1/code-review/reviews" \
+  -H "Authorization: Bearer $TURINGMIND_API_KEY" \
   -H "Content-Type: application/json" \
-  "$API_URL/api/v1/code-review/reviews" \
   -d '{
-    "review_id": "rev_abc123def456",
-    "timestamp": "2026-01-09T12:00:15Z",
-    "duration_ms": 15000,
     "context": {
-      "repo": "turingmindai/myapp",
-      "branch": "feature/auth",
-      "commit": "abc123def456",
+      "repo": "owner/repo",
+      "branch": "main",
+      "commit": "abc123",
       "review_type": "quick"
     },
-    "files_reviewed": [
-      { "path": "src/auth.ts", "lines_added": 45, "lines_removed": 12 }
-    ],
-    "issues": [
-      {
-        "id": "iss_abc123",
-        "category": "security",
-        "severity": "critical",
-        "confidence": 95,
-        "title": "SQL Injection vulnerability",
-        "file": "src/auth.ts",
-        "line": 23,
-        "cwe": "CWE-89"
-      }
-    ],
-    "filtered": {
-      "below_threshold": 5,
-      "pre_existing": 2,
-      "false_positive_pattern": 1,
-      "linter_territory": 0
-    },
-    "summary": {
-      "critical": 1,
-      "warning": 2,
-      "medium": 0,
-      "filtered": 8
-    }
+    "raw_content": "Review summary in markdown format...",
+    "summary": {"critical": 0, "warning": 1}
+  }'
+```
+
+#### Full Upload (Optional structured data)
+
+```bash
+curl -s -X POST "${TURINGMIND_API_URL:-http://localhost:3000}/api/v1/code-review/reviews" \
+  -H "Authorization: Bearer $TURINGMIND_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "context": {"repo": "owner/repo", "review_type": "deep"},
+    "raw_content": "Full markdown review here...",
+    "files_reviewed": [{"path": "src/file.ts"}],
+    "issues": [{"title": "Issue found", "file": "src/file.ts"}],
+    "summary": {"critical": 0, "warning": 1, "medium": 0}
   }'
 ```
 
@@ -158,7 +178,6 @@ Response:
 {
   "review_id": "rev_abc123def456",
   "stored": true,
-  "issues_count": 1,
   "message": "Review stored successfully"
 }
 ```
@@ -166,7 +185,7 @@ Response:
 ### 4. Send Issue Feedback
 
 ```bash
-API_URL="${TURINGMIND_API_URL:-https://api-dev.turingmind.ai}"
+API_URL="${TURINGMIND_API_URL:-http://localhost:3000}"
 curl -X POST -H "Authorization: Bearer $TURINGMIND_API_KEY" \
   -H "Content-Type: application/json" \
   "$API_URL/api/v1/code-review/issues/$ISSUE_ID/feedback" \
@@ -208,7 +227,7 @@ For `false_positive`, include `pattern` and `reason`:
 ### On Review Complete
 
 1. Format review results as JSON
-2. POST to `/api/v1/code-review/reviews` (async, non-blocking)
+2. Run `~/.turingmind/upload_review.sh "$REVIEW_JSON"` (async, non-blocking)
 3. Handle failures gracefully (don't break review)
 
 ### On User Feedback
