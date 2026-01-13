@@ -42,17 +42,23 @@ if command -v claude &> /dev/null; then
     if [ -n "$PLUGIN_CACHE" ]; then
         # Plugin cache exists - test if command works (catches "Unknown skill" errors)
         # Use timeout if available to prevent hanging, otherwise rely on quick error response
+        # Redirect stderr to /dev/null during test to suppress debugger output and error messages
         if command -v timeout &> /dev/null; then
-            SKILL_TEST_OUTPUT=$(timeout 2 claude --print "/tmind:review" 2>&1 | head -3)
+            SKILL_TEST_OUTPUT=$(timeout 2 sh -c 'claude --print "/tmind:review" 2>/dev/null' | head -3)
             SKILL_TEST_EXIT=$?
+            # Also check stderr separately for "Unknown skill" errors
+            SKILL_TEST_ERROR=$(timeout 2 sh -c 'claude --print "/tmind:review" 2>&1 >/dev/null' | grep -iE "unknown skill|turingmind-code-review" | head -1)
         else
             # No timeout - "Unknown skill" errors return quickly, so this should be fast
-            SKILL_TEST_OUTPUT=$(claude --print "/tmind:review" 2>&1 | head -3)
+            SKILL_TEST_OUTPUT=$(sh -c 'claude --print "/tmind:review" 2>/dev/null' | head -3)
             SKILL_TEST_EXIT=$?
+            # Also check stderr separately for "Unknown skill" errors
+            SKILL_TEST_ERROR=$(sh -c 'claude --print "/tmind:review" 2>&1 >/dev/null' | grep -iE "unknown skill|turingmind-code-review" | head -1)
         fi
         
         # Check for "Unknown skill" error pattern (case insensitive)
-        if [ $SKILL_TEST_EXIT -eq 0 ] && ! echo "$SKILL_TEST_OUTPUT" | grep -qiE "unknown skill|skill.*not found|not.*recognized|turingmind-code-review"; then
+        # Check both stdout and stderr for errors
+        if [ $SKILL_TEST_EXIT -eq 0 ] && [ -z "$SKILL_TEST_ERROR" ] && ! echo "$SKILL_TEST_OUTPUT" | grep -qiE "unknown skill|skill.*not found|not.*recognized|turingmind-code-review"; then
             CLI_CMD="claude"
             CLI_TYPE="claude"
         else
