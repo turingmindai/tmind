@@ -104,10 +104,44 @@ CLI_TYPE=""
 CURSOR_API_KEY="${CURSOR_API_KEY:-}"
 
 if command -v claude &> /dev/null; then
-    CLI_CMD="claude"
-    CLI_TYPE="claude"
-    [ "$VERBOSE" = true ] && echo -e "${CYAN}   Using Claude Code CLI${NC}"
-elif command -v cursor-agent &> /dev/null || command -v agent &> /dev/null; then
+    # Check if tmind skill is installed
+    PLUGIN_CACHE=$(find ~/.claude/plugins/cache -name "tmind" -type d 2>/dev/null | head -1)
+    
+    # Test if the command works (with timeout to prevent hanging)
+    if command -v timeout &> /dev/null; then
+        SKILL_TEST_OUTPUT=$(timeout 3 claude --print "/tmind:review" 2>&1 | head -5)
+        SKILL_TEST_EXIT=$?
+    else
+        SKILL_TEST_OUTPUT=$(claude --print "/tmind:review" 2>&1 | head -5)
+        SKILL_TEST_EXIT=$?
+    fi
+    
+    # Check for "Unknown skill" error pattern (case insensitive)
+    if [ -n "$PLUGIN_CACHE" ] && [ $SKILL_TEST_EXIT -eq 0 ] && ! echo "$SKILL_TEST_OUTPUT" | grep -qiE "unknown skill|skill.*not found|not.*recognized|turingmind-code-review"; then
+        CLI_CMD="claude"
+        CLI_TYPE="claude"
+        [ "$VERBOSE" = true ] && echo -e "${CYAN}   Using Claude Code CLI${NC}"
+    else
+        # Skill not installed - fall through to Cursor
+        if [ "$VERBOSE" = true ] || [ -z "$CLI_TYPE" ]; then
+            if [ -z "$PLUGIN_CACHE" ]; then
+                echo -e "${YELLOW}⚠️  Claude Code found but tmind skill not installed${NC}"
+            elif echo "$SKILL_TEST_OUTPUT" | grep -qiE "unknown skill|turingmind-code-review"; then
+                echo -e "${YELLOW}⚠️  Claude Code found but tmind skill not recognized${NC}"
+            else
+                echo -e "${YELLOW}⚠️  Claude Code found but tmind skill not available${NC}"
+            fi
+            echo "   Install skill: /plugin install tmind@tmind"
+            if [ -z "$CLI_TYPE" ]; then
+                echo "   Falling back to Cursor CLI..."
+            fi
+        fi
+    fi
+fi
+
+# If Claude Code not available or skill missing, try Cursor
+if [ -z "$CLI_TYPE" ]; then
+    if command -v cursor-agent &> /dev/null || command -v agent &> /dev/null; then
     # Check which command name exists
     if command -v cursor-agent &> /dev/null; then
         CLI_CMD="cursor-agent"

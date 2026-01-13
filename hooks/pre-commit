@@ -50,35 +50,69 @@ CLI_TYPE=""
 CURSOR_API_KEY=""
 
 if command -v claude &> /dev/null; then
-    CLI_CMD="claude"
-    CLI_TYPE="claude"
-    echo -e "${CYAN}   Using Claude Code CLI${NC}"
-elif command -v cursor-agent &> /dev/null || command -v agent &> /dev/null; then
-    # Check which command name exists
-    if command -v cursor-agent &> /dev/null; then
-        CLI_CMD="cursor-agent"
-    else
-        CLI_CMD="agent"
-    fi
-    CLI_TYPE="cursor"
+    # Check if tmind skill is installed by looking for plugin cache
+    PLUGIN_CACHE=$(find ~/.claude/plugins/cache -name "tmind" -type d 2>/dev/null | head -1)
     
-    # Read API key from environment (for non-interactive use)
-    CURSOR_API_KEY="${CURSOR_API_KEY:-}"
-    
-    # Check for API key authentication (required for non-interactive use)
-    if [ -n "$CURSOR_API_KEY" ]; then
-        echo -e "${CYAN}   Using Cursor CLI (API key)${NC}"
-    else
-        # Check if authenticated via browser login
-        if $CLI_CMD status &>/dev/null 2>&1; then
-            echo -e "${CYAN}   Using Cursor CLI (browser auth)${NC}"
+    if [ -n "$PLUGIN_CACHE" ]; then
+        # Plugin cache exists - test if command works (catches "Unknown skill" errors)
+        # Use timeout if available to prevent hanging, otherwise rely on quick error response
+        if command -v timeout &> /dev/null; then
+            SKILL_TEST_OUTPUT=$(timeout 2 claude --print "/tmind:review" 2>&1 | head -3)
+            SKILL_TEST_EXIT=$?
         else
-            echo -e "${YELLOW}⚠️  Cursor CLI found but not authenticated${NC}"
-            echo "   For git hooks, set CURSOR_API_KEY environment variable:"
-            echo "   export CURSOR_API_KEY=your_api_key_here"
-            echo "   Or run: $CLI_CMD login"
-            echo "   Skipping review..."
-            exit 0
+            # No timeout - "Unknown skill" errors return quickly, so this should be fast
+            SKILL_TEST_OUTPUT=$(claude --print "/tmind:review" 2>&1 | head -3)
+            SKILL_TEST_EXIT=$?
+        fi
+        
+        # Check for "Unknown skill" error pattern (case insensitive)
+        if [ $SKILL_TEST_EXIT -eq 0 ] && ! echo "$SKILL_TEST_OUTPUT" | grep -qiE "unknown skill|skill.*not found|not.*recognized|turingmind-code-review"; then
+            CLI_CMD="claude"
+            CLI_TYPE="claude"
+            echo -e "${CYAN}   Using Claude Code CLI${NC}"
+        else
+            # Skill cache exists but command fails - likely "Unknown skill" error
+            echo -e "${YELLOW}⚠️  Claude Code found but tmind skill not recognized${NC}"
+            echo "   Install skill: /plugin install tmind@tmind"
+            echo "   Falling back to Cursor CLI..."
+        fi
+    else
+        # No plugin cache - skill definitely not installed
+        echo -e "${YELLOW}⚠️  Claude Code found but tmind skill not installed${NC}"
+        echo "   Install skill: /plugin install tmind@tmind"
+        echo "   Falling back to Cursor CLI..."
+    fi
+fi
+
+# If Claude Code not available or skill missing, try Cursor
+if [ -z "$CLI_TYPE" ]; then
+    if command -v cursor-agent &> /dev/null || command -v agent &> /dev/null; then
+        # Check which command name exists
+        if command -v cursor-agent &> /dev/null; then
+            CLI_CMD="cursor-agent"
+        else
+            CLI_CMD="agent"
+        fi
+        CLI_TYPE="cursor"
+        
+        # Read API key from environment (for non-interactive use)
+        CURSOR_API_KEY="${CURSOR_API_KEY:-}"
+        
+        # Check for API key authentication (required for non-interactive use)
+        if [ -n "$CURSOR_API_KEY" ]; then
+            echo -e "${CYAN}   Using Cursor CLI (API key)${NC}"
+        else
+            # Check if authenticated via browser login
+            if $CLI_CMD status &>/dev/null 2>&1; then
+                echo -e "${CYAN}   Using Cursor CLI (browser auth)${NC}"
+            else
+                echo -e "${YELLOW}⚠️  Cursor CLI found but not authenticated${NC}"
+                echo "   For git hooks, set CURSOR_API_KEY environment variable:"
+                echo "   export CURSOR_API_KEY=your_api_key_here"
+                echo "   Or run: $CLI_CMD login"
+                echo "   Skipping review..."
+                exit 0
+            fi
         fi
     fi
 else
