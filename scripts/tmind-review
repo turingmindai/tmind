@@ -1,0 +1,225 @@
+#!/bin/bash
+
+# TuringMind Code Review - CLI Wrapper
+# Version: 1.1.0
+# Wrapper script to run TuringMind code review from command line
+# Automatically detects and uses Claude Code or Cursor CLI
+
+# Don't use set -e - we need to handle errors explicitly
+set +e
+
+# Colors
+RED='\033[0;31m'
+YELLOW='\033[1;33m'
+GREEN='\033[0;32m'
+CYAN='\033[0;36m'
+BOLD='\033[1m'
+NC='\033[0m' # No Color
+
+# Default options
+REVIEW_TYPE="quick"
+STAGED_ONLY=false
+OUTPUT_FORMAT="text"
+VERBOSE=false
+
+usage() {
+    echo -e "${BOLD}TuringMind Code Review${NC}"
+    echo ""
+    echo "Usage: tmind-review [options]"
+    echo ""
+    echo "Options:"
+    echo "  -s, --staged     Review staged changes only"
+    echo "  -d, --deep       Deep review (includes architecture analysis)"
+    echo "  -j, --json       Output in JSON format"
+    echo "  -v, --verbose    Verbose output"
+    echo "  -h, --help       Show this help message"
+    echo ""
+    echo "Examples:"
+    echo "  tmind-review              # Review all uncommitted changes"
+    echo "  tmind-review --staged     # Review only staged changes"
+    echo "  tmind-review --deep       # Deep review with architecture analysis"
+    echo ""
+}
+
+# Parse arguments
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        -s|--staged)
+            STAGED_ONLY=true
+            shift
+            ;;
+        -d|--deep)
+            REVIEW_TYPE="deep"
+            shift
+            ;;
+        -j|--json)
+            OUTPUT_FORMAT="json"
+            shift
+            ;;
+        -v|--verbose)
+            VERBOSE=true
+            shift
+            ;;
+        -h|--help)
+            usage
+            exit 0
+            ;;
+        *)
+            echo -e "${RED}Unknown option: $1${NC}"
+            usage
+            exit 1
+            ;;
+    esac
+done
+
+# Check if we're in a git repository
+if ! git rev-parse --git-dir > /dev/null 2>&1; then
+    echo -e "${RED}Error: Not in a git repository${NC}"
+    exit 1
+fi
+
+# Check for changes
+if [ "$STAGED_ONLY" = true ]; then
+    changes=$(git diff --cached --name-only)
+    change_type="staged"
+else
+    changes=$(git diff --name-only)
+    change_type="uncommitted"
+fi
+
+if [ -z "$changes" ]; then
+    echo -e "${GREEN}✅ No ${change_type} changes to review${NC}"
+    exit 0
+fi
+
+file_count=$(echo "$changes" | wc -l | tr -d ' ')
+echo -e "${CYAN}🧠 TuringMind Code Review${NC}"
+echo -e "   Mode: ${BOLD}${REVIEW_TYPE}${NC}"
+echo -e "   Files: ${BOLD}${file_count}${NC} ${change_type} file(s)"
+echo ""
+
+# Detect available CLI
+CLI_CMD=""
+CLI_TYPE=""
+CURSOR_API_KEY="${CURSOR_API_KEY:-}"
+
+if command -v claude &> /dev/null; then
+    CLI_CMD="claude"
+    CLI_TYPE="claude"
+    [ "$VERBOSE" = true ] && echo -e "${CYAN}   Using Claude Code CLI${NC}"
+elif command -v cursor-agent &> /dev/null || command -v agent &> /dev/null; then
+    # Check which command name exists
+    if command -v cursor-agent &> /dev/null; then
+        CLI_CMD="cursor-agent"
+    else
+        CLI_CMD="agent"
+    fi
+    CLI_TYPE="cursor"
+    
+    # Check authentication
+    if [ -n "$CURSOR_API_KEY" ]; then
+        [ "$VERBOSE" = true ] && echo -e "${CYAN}   Using Cursor CLI (API key)${NC}"
+    elif $CLI_CMD status &>/dev/null 2>&1; then
+        [ "$VERBOSE" = true ] && echo -e "${CYAN}   Using Cursor CLI (browser auth)${NC}"
+    else
+        echo -e "${YELLOW}⚠️  Cursor CLI found but not authenticated${NC}"
+        echo ""
+        echo "Set CURSOR_API_KEY environment variable:"
+        echo "  export CURSOR_API_KEY=your_api_key_here"
+        echo ""
+        echo "Or login interactively:"
+        echo "  $CLI_CMD login"
+        exit 1
+    fi
+else
+    echo -e "${RED}Error: No supported CLI found${NC}"
+    echo ""
+    echo "Install one of:"
+    echo "  - Claude Code: npm install -g @anthropic-ai/claude-code"
+    echo "  - Cursor: https://cursor.sh (includes cursor-agent)"
+    exit 1
+fi
+
+# Build review prompt
+if [ "$STAGED_ONLY" = true ]; then
+    SCOPE="staged git changes"
+else
+    SCOPE="all uncommitted changes"
+fi
+
+if [ "$REVIEW_TYPE" = "deep" ]; then
+    DEPTH="This is a deep review - include architecture analysis and be thorough."
+else
+    DEPTH="Focus on significant issues that would block a commit."
+fi
+
+REVIEW_PROMPT="Run TuringMind code review on ${SCOPE}.
+${DEPTH}
+Follow the TuringMind review workflow from .cursor/rules/tmind-review.md.
+Use the agent checks from .cursor/rules/tmind-agents.md.
+Output findings in the specified format with severity scores.
+Focus only on the diff (new/modified code), not pre-existing issues."
+
+# Run review with timeout protection
+TIMEOUT_SECONDS="${TMIND_TIMEOUT:-300}"  # Default 5 minutes, configurable via env var
+exit_code=1
+
+if [ "$CLI_TYPE" = "claude" ]; then
+    if command -v timeout &> /dev/null; then
+        if [ "$REVIEW_TYPE" = "deep" ]; then
+            timeout "$TIMEOUT_SECONDS" claude --print "/tmind:deep-review"
+        else
+            timeout "$TIMEOUT_SECONDS" claude --print "/tmind:review"
+        fi
+        exit_code=$?
+        if [ $exit_code -eq 124 ]; then
+            echo -e "${YELLOW}⚠️  Review timed out after ${TIMEOUT_SECONDS} seconds${NC}"
+            exit_code=1
+        fi
+    else
+        # No timeout command available
+        if [ "$REVIEW_TYPE" = "deep" ]; then
+            claude --print "/tmind:deep-review"
+        else
+            claude --print "/tmind:review"
+        fi
+        exit_code=$?
+    fi
+elif [ "$CLI_TYPE" = "cursor" ]; then
+    # Build command with API key if available
+    if [ -n "$CURSOR_API_KEY" ]; then
+        CURSOR_ARGS=("--api-key" "$CURSOR_API_KEY" "-p" "$REVIEW_PROMPT" "--output-format" "$OUTPUT_FORMAT")
+    else
+        CURSOR_ARGS=("-p" "$REVIEW_PROMPT" "--output-format" "$OUTPUT_FORMAT")
+    fi
+    
+    if command -v timeout &> /dev/null; then
+        timeout "$TIMEOUT_SECONDS" "$CLI_CMD" "${CURSOR_ARGS[@]}"
+        exit_code=$?
+        if [ $exit_code -eq 124 ]; then
+            echo -e "${YELLOW}⚠️  Review timed out after ${TIMEOUT_SECONDS} seconds${NC}"
+            exit_code=1
+        fi
+    else
+        # No timeout command available
+        "$CLI_CMD" "${CURSOR_ARGS[@]}"
+        exit_code=$?
+    fi
+fi
+
+if [ $exit_code -ne 0 ] && [ $exit_code -ne 124 ]; then
+    echo -e "${RED}Review failed with exit code: ${exit_code}${NC}"
+    if [ "$VERBOSE" = true ]; then
+        echo ""
+        echo "Troubleshooting:"
+        if [ "$CLI_TYPE" = "cursor" ]; then
+            echo "  - Check authentication: $CLI_CMD status"
+            echo "  - Set API key: export CURSOR_API_KEY=your_key"
+            echo "  - Or login: $CLI_CMD login"
+        else
+            echo "  - Check Claude CLI configuration"
+        fi
+    fi
+fi
+
+exit $exit_code

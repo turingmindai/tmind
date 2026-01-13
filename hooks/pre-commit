@@ -1,11 +1,13 @@
 #!/bin/bash
 
 # TuringMind Code Review - Pre-Commit Hook
-# Version: 1.0.0
-# Runs /tmind:review on staged changes before commit
+# Version: 2.1.0
+# Runs code review on staged changes before commit
+# Supports both Claude Code and Cursor IDE
 # Blocks commit if Critical severity issues are found
 
-set -e
+# Don't use set -e - we need to handle errors explicitly
+set +e
 
 # Colors
 RED='\033[0;31m'
@@ -14,12 +16,24 @@ GREEN='\033[0;32m'
 CYAN='\033[0;36m'
 NC='\033[0m' # No Color
 
+# Cleanup function for temp files
+cleanup() {
+    rm -f "$review_output" 2>/dev/null
+}
+trap cleanup EXIT INT TERM
+
 echo ""
 echo -e "${CYAN}🧠 Running TuringMind Code Review before commit...${NC}"
 echo ""
 
 # Get staged files
-staged_files=$(git diff --cached --name-only --diff-filter=ACMR)
+staged_files=$(git diff --cached --name-only --diff-filter=ACMR 2>/dev/null)
+GIT_EXIT=$?
+
+if [ $GIT_EXIT -ne 0 ]; then
+    echo -e "${YELLOW}⚠️  Could not read git staged files. Skipping review.${NC}"
+    exit 0
+fi
 
 if [ -z "$staged_files" ]; then
     echo -e "${GREEN}✅ No staged files to review${NC}"
@@ -30,28 +44,126 @@ file_count=$(echo "$staged_files" | wc -l | tr -d ' ')
 echo "📁 Reviewing $file_count staged file(s)..."
 echo ""
 
-# Check if Claude CLI is available
-if ! command -v claude &> /dev/null; then
-    echo -e "${YELLOW}⚠️  Claude CLI not found. Skipping code review.${NC}"
-    echo "   Install: npm install -g @anthropic-ai/claude-code"
+# Detect available CLI (prefer Claude Code, fallback to Cursor)
+CLI_CMD=""
+CLI_TYPE=""
+CURSOR_API_KEY=""
+
+if command -v claude &> /dev/null; then
+    CLI_CMD="claude"
+    CLI_TYPE="claude"
+    echo -e "${CYAN}   Using Claude Code CLI${NC}"
+elif command -v cursor-agent &> /dev/null || command -v agent &> /dev/null; then
+    # Check which command name exists
+    if command -v cursor-agent &> /dev/null; then
+        CLI_CMD="cursor-agent"
+    else
+        CLI_CMD="agent"
+    fi
+    CLI_TYPE="cursor"
+    
+    # Read API key from environment (for non-interactive use)
+    CURSOR_API_KEY="${CURSOR_API_KEY:-}"
+    
+    # Check for API key authentication (required for non-interactive use)
+    if [ -n "$CURSOR_API_KEY" ]; then
+        echo -e "${CYAN}   Using Cursor CLI (API key)${NC}"
+    else
+        # Check if authenticated via browser login
+        if $CLI_CMD status &>/dev/null 2>&1; then
+            echo -e "${CYAN}   Using Cursor CLI (browser auth)${NC}"
+        else
+            echo -e "${YELLOW}⚠️  Cursor CLI found but not authenticated${NC}"
+            echo "   For git hooks, set CURSOR_API_KEY environment variable:"
+            echo "   export CURSOR_API_KEY=your_api_key_here"
+            echo "   Or run: $CLI_CMD login"
+            echo "   Skipping review..."
+            exit 0
+        fi
+    fi
+else
+    echo -e "${YELLOW}⚠️  No supported CLI found. Skipping code review.${NC}"
+    echo "   Install one of:"
+    echo "   - Claude Code: npm install -g @anthropic-ai/claude-code"
+    echo "   - Cursor: https://cursor.sh (includes cursor-agent)"
     exit 0
 fi
 
-# Run code review with --print flag for non-interactive output
-review_output=$(mktemp)
+# Run code review
+review_output=$(mktemp 2>/dev/null)
+if [ -z "$review_output" ] || [ ! -f "$review_output" ]; then
+    echo -e "${YELLOW}⚠️  Could not create temp file. Skipping review.${NC}"
+    exit 0
+fi
 
-if claude --print "/tmind:review" > "$review_output" 2>&1; then
+review_success=false
+review_exit_code=1
+
+if [ "$CLI_TYPE" = "claude" ]; then
+    # Claude Code: Use slash command
+    # Add timeout if available (5 minutes)
+    if command -v timeout &> /dev/null; then
+        timeout 300 claude --print "/tmind:review" > "$review_output" 2>&1
+        review_exit_code=$?
+        if [ $review_exit_code -eq 124 ]; then
+            echo -e "${YELLOW}⚠️  Review timed out after 5 minutes. Allowing commit.${NC}"
+            exit 0
+        fi
+    else
+        claude --print "/tmind:review" > "$review_output" 2>&1
+        review_exit_code=$?
+    fi
+    
+    if [ $review_exit_code -eq 0 ]; then
+        review_success=true
+    fi
+elif [ "$CLI_TYPE" = "cursor" ]; then
+    # Cursor: Use prompt with Cursor Rules context
+    REVIEW_PROMPT="Review the staged git changes for bugs, security issues, and code quality problems. 
+Follow the TuringMind review workflow from .cursor/rules/tmind-review.md.
+Use the agent checks from .cursor/rules/tmind-agents.md.
+Output findings in the specified format with severity scores.
+Focus only on the diff (new/modified code), not pre-existing issues."
+
+    # Build command with API key if available
+    if [ -n "$CURSOR_API_KEY" ]; then
+        # Use API key authentication
+        CURSOR_ARGS=("--api-key" "$CURSOR_API_KEY" "-p" "$REVIEW_PROMPT" "--output-format" "text")
+    else
+        # Use browser authentication (already verified)
+        CURSOR_ARGS=("-p" "$REVIEW_PROMPT" "--output-format" "text")
+    fi
+    
+    # Add timeout if available (5 minutes)
+    if command -v timeout &> /dev/null; then
+        timeout 300 "$CLI_CMD" "${CURSOR_ARGS[@]}" > "$review_output" 2>&1
+        review_exit_code=$?
+        if [ $review_exit_code -eq 124 ]; then
+            echo -e "${YELLOW}⚠️  Review timed out after 5 minutes. Allowing commit.${NC}"
+            exit 0
+        fi
+    else
+        "$CLI_CMD" "${CURSOR_ARGS[@]}" > "$review_output" 2>&1
+        review_exit_code=$?
+    fi
+    
+    if [ $review_exit_code -eq 0 ]; then
+        review_success=true
+    fi
+fi
+
+if [ "$review_success" = true ]; then
     # Check for Critical severity issues (95-100)
-    if grep -qE '🔴|Critical \(95-100\)|CRITICAL' "$review_output"; then
+    # Use case-insensitive grep and multiple patterns
+    if grep -qiE '(🔴|critical\s*\(95-100\)|critical|severity.*(9[5-9]|100)|severity.*critical)' "$review_output"; then
         echo -e "${RED}❌ COMMIT BLOCKED - Critical issues found${NC}"
         echo ""
         cat "$review_output"
         echo ""
         echo -e "${RED}Fix critical issues before committing.${NC}"
-        rm "$review_output"
         exit 1
     # Check for Warning severity issues (80-94)
-    elif grep -qE '🟠|Warning \(80-94\)|HIGH' "$review_output"; then
+    elif grep -qiE '(🟠|warning\s*\(80-94\)|high|severity.*(8[0-9]|9[0-4])|severity.*high)' "$review_output"; then
         echo -e "${YELLOW}⚠️  Warning issues found (non-blocking)${NC}"
         echo ""
         cat "$review_output"
@@ -64,11 +176,22 @@ if claude --print "/tmind:review" > "$review_output" 2>&1; then
     fi
 else
     echo -e "${YELLOW}⚠️  Code review failed to run. Allowing commit.${NC}"
-    echo "   Check Claude CLI configuration."
+    echo "   CLI: $CLI_TYPE"
+    echo "   Exit code: $review_exit_code"
+    if [ -f "$review_output" ] && [ -s "$review_output" ]; then
+        echo "   Output (last 20 lines):"
+        tail -20 "$review_output" | sed 's/^/   /'
+    fi
+    echo ""
+    echo "   Troubleshooting:"
+    if [ "$CLI_TYPE" = "cursor" ]; then
+        echo "   - Check authentication: $CLI_CMD status"
+        echo "   - Set API key: export CURSOR_API_KEY=your_key"
+        echo "   - Or login: $CLI_CMD login"
+    else
+        echo "   - Check Claude CLI configuration"
+    fi
 fi
-
-rm -f "$review_output"
 
 echo ""
 exit 0
-

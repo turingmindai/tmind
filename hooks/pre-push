@@ -1,11 +1,13 @@
 #!/bin/bash
 
 # TuringMind Code Review - Pre-Push Hook
-# Version: 1.1.0
-# Runs /tmind:review on changes before pushing to remote
+# Version: 2.1.0
+# Runs code review on changes before pushing to remote
+# Supports both Claude Code and Cursor IDE
 # Blocks push if Critical or High severity issues are found
 
-set -e
+# Don't use set -e - we need to handle errors explicitly
+set +e
 
 # Colors
 RED='\033[0;31m'
@@ -14,6 +16,12 @@ GREEN='\033[0;32m'
 CYAN='\033[0;36m'
 NC='\033[0m' # No Color
 
+# Cleanup function for temp files
+cleanup() {
+    rm -f "$review_output" 2>/dev/null
+}
+trap cleanup EXIT INT TERM
+
 echo ""
 echo -e "${CYAN}🧠 Running TuringMind Code Review before push...${NC}"
 echo ""
@@ -21,6 +29,51 @@ echo ""
 # Get the remote and URL being pushed to
 remote="$1"
 url="$2"
+
+# Detect available CLI (prefer Claude Code, fallback to Cursor)
+CLI_CMD=""
+CLI_TYPE=""
+CURSOR_API_KEY=""
+
+if command -v claude &> /dev/null; then
+    CLI_CMD="claude"
+    CLI_TYPE="claude"
+elif command -v cursor-agent &> /dev/null || command -v agent &> /dev/null; then
+    # Check which command name exists
+    if command -v cursor-agent &> /dev/null; then
+        CLI_CMD="cursor-agent"
+    else
+        CLI_CMD="agent"
+    fi
+    CLI_TYPE="cursor"
+    
+    # Read API key from environment (for non-interactive use)
+    CURSOR_API_KEY="${CURSOR_API_KEY:-}"
+    
+    # Check for API key authentication (required for non-interactive use)
+    if [ -n "$CURSOR_API_KEY" ]; then
+        # API key provided, will use it
+        :
+    elif ! $CLI_CMD status &>/dev/null 2>&1; then
+        echo -e "${YELLOW}⚠️  Cursor CLI found but not authenticated${NC}"
+        echo "   For git hooks, set CURSOR_API_KEY environment variable:"
+        echo "   export CURSOR_API_KEY=your_api_key_here"
+        echo "   Or run: $CLI_CMD login"
+        echo "   Skipping review..."
+        exit 0
+    fi
+else
+    echo -e "${YELLOW}⚠️  No supported CLI found. Skipping code review.${NC}"
+    echo "   Install one of:"
+    echo "   - Claude Code: npm install -g @anthropic-ai/claude-code"
+    echo "   - Cursor: https://cursor.sh (includes cursor-agent)"
+    exit 0
+fi
+
+echo -e "${CYAN}   Using ${CLI_TYPE^} CLI${NC}"
+
+# Track if any ref had critical issues
+HAD_CRITICAL_ISSUES=false
 
 # Read stdin to get refs being pushed
 while read local_ref local_sha remote_ref remote_sha; do
@@ -42,58 +95,118 @@ while read local_ref local_sha remote_ref remote_sha; do
     changed_files=$(git diff --name-only "$range" 2>/dev/null || true)
 
     if [ -z "$changed_files" ]; then
-        echo -e "${GREEN}✅ No files to review${NC}"
-        exit 0
+        echo "   No files to review for ref $local_ref"
+        continue  # FIXED: Use continue instead of exit
     fi
 
     file_count=$(echo "$changed_files" | wc -l | tr -d ' ')
-    echo "📁 Reviewing $file_count file(s)..."
+    echo "📁 Reviewing $file_count file(s) for ref $local_ref..."
     echo ""
 
-    # Check if Claude CLI is available
-    if ! command -v claude &> /dev/null; then
-        echo -e "${YELLOW}⚠️  Claude CLI not found. Skipping code review.${NC}"
-        echo "   Install: npm install -g @anthropic-ai/claude-code"
-        exit 0
+    # Run code review
+    review_output=$(mktemp 2>/dev/null)
+    if [ -z "$review_output" ] || [ ! -f "$review_output" ]; then
+        echo -e "${YELLOW}⚠️  Could not create temp file. Skipping this ref.${NC}"
+        continue
     fi
 
-    # Run code review with --print flag for non-interactive output
-    review_output=$(mktemp)
+    review_success=false
+    review_exit_code=1
 
-    if claude --print "/tmind:review" > "$review_output" 2>&1; then
+    if [ "$CLI_TYPE" = "claude" ]; then
+        # Claude Code: Use slash command
+        # Add timeout if available (5 minutes)
+        if command -v timeout &> /dev/null; then
+            timeout 300 claude --print "/tmind:review" > "$review_output" 2>&1
+            review_exit_code=$?
+            if [ $review_exit_code -eq 124 ]; then
+                echo -e "${YELLOW}⚠️  Review timed out after 5 minutes. Allowing push.${NC}"
+                continue
+            fi
+        else
+            claude --print "/tmind:review" > "$review_output" 2>&1
+            review_exit_code=$?
+        fi
+        
+        if [ $review_exit_code -eq 0 ]; then
+            review_success=true
+        fi
+    elif [ "$CLI_TYPE" = "cursor" ]; then
+        # Cursor: Use prompt with Cursor Rules context
+        REVIEW_PROMPT="Review the git changes being pushed for bugs, security issues, and code quality problems.
+Follow the TuringMind review workflow from .cursor/rules/tmind-review.md.
+Use the agent checks from .cursor/rules/tmind-agents.md.
+Output findings in the specified format with severity scores.
+Focus only on the diff (new/modified code), not pre-existing issues.
+This is a pre-push review - be thorough."
+
+        # Build command with API key if available
+        if [ -n "$CURSOR_API_KEY" ]; then
+            # Use API key authentication
+            CURSOR_ARGS=("--api-key" "$CURSOR_API_KEY" "-p" "$REVIEW_PROMPT" "--output-format" "text")
+        else
+            # Use browser authentication (already verified)
+            CURSOR_ARGS=("-p" "$REVIEW_PROMPT" "--output-format" "text")
+        fi
+        
+        # Add timeout if available (5 minutes)
+        if command -v timeout &> /dev/null; then
+            timeout 300 "$CLI_CMD" "${CURSOR_ARGS[@]}" > "$review_output" 2>&1
+            review_exit_code=$?
+            if [ $review_exit_code -eq 124 ]; then
+                echo -e "${YELLOW}⚠️  Review timed out after 5 minutes. Allowing push.${NC}"
+                continue
+            fi
+        else
+            "$CLI_CMD" "${CURSOR_ARGS[@]}" > "$review_output" 2>&1
+            review_exit_code=$?
+        fi
+        
+        if [ $review_exit_code -eq 0 ]; then
+            review_success=true
+        fi
+    fi
+
+    if [ "$review_success" = true ]; then
         # Check for Critical severity issues (95-100)
-        if grep -qE '🔴|Critical \(95-100\)|CRITICAL' "$review_output"; then
-            echo -e "${RED}❌ PUSH BLOCKED - Critical issues found${NC}"
+        if grep -qiE '(🔴|critical\s*\(95-100\)|critical|severity.*(9[5-9]|100)|severity.*critical)' "$review_output"; then
+            echo -e "${RED}❌ PUSH BLOCKED - Critical issues found in $local_ref${NC}"
             echo ""
             cat "$review_output"
             echo ""
             echo -e "${RED}Fix critical issues before pushing.${NC}"
-            rm "$review_output"
-            exit 1
+            HAD_CRITICAL_ISSUES=true
+            # Continue checking other refs, but remember we found critical issues
         # Check for Warning severity issues (80-94)
-        elif grep -qE '🟠|Warning \(80-94\)|HIGH' "$review_output"; then
-            echo -e "${YELLOW}⚠️  Warning issues found (non-blocking)${NC}"
+        elif grep -qiE '(🟠|warning\s*\(80-94\)|high|severity.*(8[0-9]|9[0-4])|severity.*high)' "$review_output"; then
+            echo -e "${YELLOW}⚠️  Warning issues found in $local_ref (non-blocking)${NC}"
             echo ""
             cat "$review_output"
             echo ""
             echo -e "${YELLOW}Consider fixing these issues.${NC}"
-            # Warnings are non-blocking by default
-            # To make warnings block, uncomment the next two lines:
-            # rm "$review_output"
-            # exit 1
         else
-            echo -e "${GREEN}✅ Code review passed${NC}"
+            echo -e "${GREEN}✅ Code review passed for $local_ref${NC}"
             echo ""
             cat "$review_output"
         fi
     else
-        echo -e "${YELLOW}⚠️  Code review failed to run. Allowing push.${NC}"
-        echo "   Check Claude CLI configuration."
+        echo -e "${YELLOW}⚠️  Code review failed for $local_ref. Allowing push.${NC}"
+        echo "   CLI: $CLI_TYPE"
+        echo "   Exit code: $review_exit_code"
+        if [ -f "$review_output" ] && [ -s "$review_output" ]; then
+            echo "   Output (last 20 lines):"
+            tail -20 "$review_output" | sed 's/^/   /'
+        fi
     fi
 
     rm -f "$review_output"
 done
 
 echo ""
-exit 0
 
+# Exit with error if we found critical issues in any ref
+if [ "$HAD_CRITICAL_ISSUES" = true ]; then
+    exit 1
+fi
+
+exit 0

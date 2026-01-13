@@ -4,7 +4,7 @@
 
 **Catch bugs before they catch you.**
 
-A [Claude Code](https://docs.anthropic.com/en/docs/claude-code) skill for AI-powered code review of your uncommitted changes. Install from the marketplace, review instantly.
+A [Claude Code](https://docs.anthropic.com/en/docs/claude-code) skill and [Cursor IDE](https://cursor.sh) integration for AI-powered code review of your uncommitted changes. Install from the marketplace, review instantly.
 
 [![MIT License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Claude Code Skill](https://img.shields.io/badge/Claude_Code-Skill-blueviolet)](https://docs.anthropic.com/en/docs/claude-code)
@@ -18,9 +18,10 @@ A [Claude Code](https://docs.anthropic.com/en/docs/claude-code) skill for AI-pow
 
 ## 📦 What is This?
 
-**TuringMind Code Review** is a **Claude Code skill** — a reusable, shareable plugin that extends Claude Code with specialized code review capabilities. 
+**TuringMind Code Review** is a **Claude Code skill** and **Cursor IDE integration** — a reusable, shareable plugin that extends Claude Code and Cursor with specialized code review capabilities. 
 
-Claude Code skills are installed via the built-in plugin marketplace and add new slash commands to your Claude Code environment.
+- **Claude Code:** Skills are installed via the built-in plugin marketplace and add new slash commands to your Claude Code environment.
+- **Cursor IDE:** Uses MCP (Model Context Protocol) tools and Cursor Rules for seamless integration.
 
 ---
 
@@ -42,7 +43,16 @@ TuringMind catches what linters miss:
 
 ## 🚀 Quick Start
 
-### Install from Marketplace
+### Supported IDEs
+
+TuringMind works with:
+
+- **Claude Code** (Claude Desktop) - Global MCP configuration
+- **Cursor IDE** - Project-specific MCP configuration
+
+Both IDEs are automatically detected and configured during setup.
+
+### Install from Marketplace (Claude Code)
 
 Open Claude Code in your terminal and run:
 
@@ -57,16 +67,16 @@ Open Claude Code in your terminal and run:
 ```
 
 ```bash
-# Step 3: One-time setup (installs MCP server)
+# Step 3: One-time setup (installs MCP server, configures IDE)
 /tmind:setup
 ```
 
 ```bash
-# Step 4: Restart Claude, then login
+# Step 4: Restart your IDE (Claude Desktop or Cursor), then login
 /tmind:login
 ```
 
-### Use the Commands
+### Use the Commands (Claude Code)
 
 ```bash
 # Quick review — fast, pre-commit check
@@ -76,14 +86,36 @@ Open Claude Code in your terminal and run:
 /tmind:deep-review
 ```
 
+### Use in Cursor IDE
+
+In Cursor, use natural language in the chat:
+
+```
+Review my staged changes for bugs and security issues
+```
+
+Or use the `cursor-agent` CLI directly:
+
+```bash
+# Quick review
+cursor-agent -p "Run TuringMind code review on my staged changes"
+
+# Deep review
+cursor-agent -p "Run TuringMind deep code review including architecture analysis"
+```
+
+Cursor Rules (`.cursor/rules/tmind-*.md`) guide the AI to follow the TuringMind workflow.
+
 That's it. Reviews work locally. Cloud features (memory, analytics) require login.
 
 ### Requirements
 
-- [Claude Code](https://docs.anthropic.com/en/docs/claude-code) installed and configured
+- [Claude Code](https://docs.anthropic.com/en/docs/claude-code) or [Cursor IDE](https://cursor.sh) installed and configured
 - Git repository with uncommitted changes
 
 ### Optional: Git Hooks
+
+Git hooks work with **both** Claude Code and Cursor IDE. They automatically detect which CLI is available.
 
 #### Pre-Commit Hook (Recommended)
 
@@ -99,6 +131,7 @@ What it does:
 - 🔴 **Critical issues (95-100)** → Blocks the commit
 - 🟠 **Warning issues (80-94)** → Shows warning, allows commit
 - ✅ **No issues** → Commit proceeds normally
+- 🔄 **Detects CLI** → Uses `claude` or `cursor-agent` automatically
 
 To uninstall: `rm .git/hooks/pre-commit`
 
@@ -115,6 +148,7 @@ What it does:
 - 🔴 **Critical issues (95-100)** → Blocks the push
 - 🟠 **Warning issues (80-94)** → Shows warning, allows push
 - ✅ **No issues** → Push proceeds normally
+- 🔄 **Detects CLI** → Uses `claude` or `cursor-agent` automatically
 
 To uninstall: `rm .git/hooks/pre-push`
 
@@ -273,23 +307,34 @@ Includes everything above, plus:
 Modular design for easy customization:
 
 ```text
-plugins/tmind/
-├── commands/           # Review orchestration
-│   ├── review.md
-│   ├── deep-review.md
-│   ├── login.md
-│   └── setup.md        # One-time MCP setup
-├── agents/             # Specialized reviewers
-│   ├── bugs.md
-│   ├── security.md
-│   ├── compliance.md
-│   ├── architecture.md
-│   ├── index.md        # Agent router
-│   └── language-*.md
-└── templates/          # Output & filtering
-    ├── output-format.md
-    ├── memory-context.md   # Cloud memory injection
-    └── false-positive-rules.md
+tmind/
+├── plugins/tmind/          # Claude Code skill files
+│   ├── commands/           # Review orchestration
+│   │   ├── review.md
+│   │   ├── deep-review.md
+│   │   ├── login.md
+│   │   └── setup.md        # One-time MCP setup
+│   ├── agents/             # Specialized reviewers
+│   │   ├── bugs.md
+│   │   ├── security.md
+│   │   ├── compliance.md
+│   │   ├── architecture.md
+│   │   ├── index.md        # Agent router
+│   │   └── language-*.md
+│   └── templates/          # Output & filtering
+│       ├── output-format.md
+│       ├── memory-context.md   # Cloud memory injection
+│       └── false-positive-rules.md
+├── .cursor/                # Cursor IDE integration
+│   └── rules/
+│       ├── tmind-review.md     # Review workflow for Cursor
+│       └── tmind-agents.md     # Agent prompts for Cursor
+├── hooks/                  # Git hooks (both IDEs)
+│   ├── pre-commit
+│   └── pre-push
+└── scripts/
+    ├── install-hooks.sh
+    └── tmind-review        # CLI wrapper
 ```
 
 ### Extending
@@ -344,6 +389,187 @@ Track your code quality over time:
 │                     │      │                         │
 └─────────────────────┘      └─────────────────────────┘
 ```
+
+---
+
+## 🔧 Troubleshooting
+
+### Git Hooks Issues
+
+#### Hooks Not Running
+
+**Problem:** Git hooks don't execute when committing/pushing.
+
+**Solutions:**
+```bash
+# Check if hooks are installed
+ls -la .git/hooks/pre-commit .git/hooks/pre-push
+
+# Reinstall hooks
+cp hooks/pre-commit .git/hooks/pre-commit
+cp hooks/pre-push .git/hooks/pre-push
+chmod +x .git/hooks/pre-commit .git/hooks/pre-push
+```
+
+#### "No supported CLI found" Warning
+
+**Problem:** Hooks skip review because neither `claude` nor `cursor-agent` is found.
+
+**Solutions:**
+- **Claude Code:** `npm install -g @anthropic-ai/claude-code`
+- **Cursor:** Install Cursor IDE (includes `cursor-agent` CLI)
+- Verify installation: `which claude` or `which cursor-agent`
+
+#### Review Times Out
+
+**Problem:** Review hangs and times out after 5 minutes.
+
+**Solutions:**
+- Check network connectivity
+- Review may be too large - try reviewing smaller changesets
+- Increase timeout: `export TMIND_TIMEOUT=600` (10 minutes)
+- Check CLI authentication status
+
+### Cursor IDE Issues
+
+#### "Cursor CLI found but not authenticated"
+
+**Problem:** Git hooks fail because `cursor-agent` isn't authenticated.
+
+**Solutions:**
+
+**Option 1: API Key (Recommended for Git Hooks)**
+```bash
+# Generate API key in Cursor dashboard:
+# Settings > Integrations > User API Keys
+
+# Set in your shell profile (~/.bashrc, ~/.zshrc)
+export CURSOR_API_KEY=your_api_key_here
+
+# Or set per-command
+CURSOR_API_KEY=your_key git commit -m "fix: something"
+```
+
+**Option 2: Browser Login**
+```bash
+# Login interactively (one-time)
+cursor-agent login
+
+# Verify authentication
+cursor-agent status
+```
+
+**Note:** Browser login may not work in CI/CD environments. Use API keys instead.
+
+#### Cursor Rules Not Working
+
+**Problem:** Cursor doesn't follow TuringMind review workflow.
+
+**Solutions:**
+- Ensure `.cursor/rules/tmind-review.md` exists in project root
+- Ensure `.cursor/rules/tmind-agents.md` exists
+- Restart Cursor IDE after adding rules
+- Check Cursor Rules are enabled in settings
+
+### Claude Code Issues
+
+#### "Claude CLI not found"
+
+**Problem:** `claude` command not available.
+
+**Solutions:**
+```bash
+# Install Claude Code CLI
+npm install -g @anthropic-ai/claude-code
+
+# Verify installation
+claude --version
+```
+
+#### MCP Server Not Found
+
+**Problem:** Setup fails to find `turingmind_mcp` module.
+
+**Solutions:**
+```bash
+# Reinstall MCP server
+pipx install turingmind-mcp
+
+# Or with pip
+pip install --user turingmind-mcp
+
+# Verify installation
+python -m turingmind_mcp.server --help
+```
+
+### Authentication Issues
+
+#### API Key Not Working
+
+**Problem:** `TURINGMIND_API_KEY` set but not recognized.
+
+**Solutions:**
+```bash
+# Check if key is set
+echo $TURINGMIND_API_KEY
+
+# Verify key format (should start with tm_sk_)
+# Re-login to get fresh key
+/tmind:login
+```
+
+#### Login Flow Fails
+
+**Problem:** Browser doesn't open or login times out.
+
+**Solutions:**
+- Check internet connectivity
+- Try manual login: Visit the URL shown in terminal
+- Check firewall/proxy settings
+- Verify API URL: `export TURINGMIND_API_URL=https://api.turingmind.ai`
+
+### Performance Issues
+
+#### Reviews Are Slow
+
+**Problem:** Code review takes too long.
+
+**Solutions:**
+- Use quick review (`/tmind:review`) instead of deep review
+- Review smaller changesets (commit more frequently)
+- Check if timeout is too high: `echo $TMIND_TIMEOUT`
+- Ensure CLI is up to date
+
+#### High Memory Usage
+
+**Problem:** Review process uses too much memory.
+
+**Solutions:**
+- Review smaller files/changesets
+- Close other applications
+- Check for memory leaks in CLI tools
+
+### General Issues
+
+#### "Review failed to run. Allowing commit."
+
+**Problem:** Review fails but commit proceeds.
+
+**Solutions:**
+- Check error output shown in hook
+- Verify CLI is working: `claude --version` or `cursor-agent status`
+- Check authentication (see above)
+- Enable verbose mode: `export TMIND_DEBUG=true` (if supported)
+
+#### False Positives
+
+**Problem:** Review flags issues that aren't real problems.
+
+**Solutions:**
+- Submit feedback: Use `turingmind_submit_feedback` MCP tool
+- Add ignore comments in code (if supported)
+- Adjust review sensitivity in settings
+- Use cloud mode to learn from past dismissals
 
 ---
 

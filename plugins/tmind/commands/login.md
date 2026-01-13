@@ -324,6 +324,66 @@ MERGE_SCRIPT
 fi
 ```
 
+## Configure Cursor IDE (Optional)
+
+```bash
+# Check if in Cursor project
+if [ -d ".cursor" ] || [ -f ".cursor/mcp.json" ]; then
+    if [ -n "$PYTHON_CMD" ] && $PYTHON_CMD -c "import turingmind_mcp" 2>/dev/null; then
+        echo "🔌 Configuring Cursor IDE..."
+        
+        mkdir -p .cursor
+        CURSOR_CONFIG=".cursor/mcp.json"
+        
+        # Get API key from config
+        API_KEY=""
+        API_URL="https://api.turingmind.ai"
+        if [ -f ~/.turingmind/config ]; then
+            source ~/.turingmind/config 2>/dev/null
+            API_KEY="${TURINGMIND_API_KEY:-}"
+            API_URL="${TURINGMIND_API_URL:-https://api.turingmind.ai}"
+        fi
+        
+        if [ -z "$API_KEY" ]; then
+            echo "   ⚠️  No API key found (run login first)"
+        else
+            $PYTHON_CMD << MERGE_SCRIPT
+import json, os
+config_path = "$CURSOR_CONFIG"
+api_key = "$API_KEY"
+api_url = "$API_URL" or "https://api.turingmind.ai"
+
+try:
+    with open(config_path) as f:
+        config = json.load(f)
+except:
+    config = {}
+
+if os.path.exists(config_path):
+    with open(config_path + ".backup", 'w') as f:
+        json.dump(config, f, indent=2)
+
+config.setdefault('mcpServers', {})['turingmind'] = {
+    "command": "$PYTHON_CMD",
+    "args": ["-m", "turingmind_mcp.server"],
+    "enabled": True,
+    "env": {
+        "TURINGMIND_API_KEY": api_key,
+        "TURINGMIND_API_URL": api_url
+    }
+}
+
+with open(config_path, 'w') as f:
+    json.dump(config, f, indent=2)
+
+print("   ✅ Cursor IDE configured")
+print("   ⚠️  Restart Cursor IDE to activate")
+MERGE_SCRIPT
+        fi
+    fi
+fi
+```
+
 ---
 
 ## Success Output

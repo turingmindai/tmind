@@ -3,9 +3,9 @@ allowed-tools: Bash(pip:*), Bash(pipx:*), Bash(python*:*), Bash(cat:*), Bash(mkd
 description: One-time setup for TuringMind MCP server
 ---
 
-One-time setup to install the TuringMind MCP server and configure Claude Desktop.
+One-time setup to install the TuringMind MCP server and configure Claude Desktop or Cursor IDE.
 
-**Run this once after installing the tmind skill, then restart Claude.**
+**Run this once after installing the tmind skill, then restart your IDE.**
 
 ## Step 1: Check Python Version
 
@@ -119,13 +119,21 @@ if [ -z "$MCP_PYTHON" ]; then
 fi
 ```
 
-## Step 4: Configure Claude Desktop
+## Step 3.5: Detect IDE Environment
 
 ```bash
 echo ""
-echo "🔌 Configuring Claude Desktop..."
+echo "🔍 Detecting IDE environment..."
 
-# Detect Claude Desktop config path
+# Check for Cursor
+CURSOR_DETECTED=false
+if [ -d ".cursor" ] || [ -f ".cursor/mcp.json" ]; then
+    CURSOR_DETECTED=true
+    echo "   ✅ Cursor IDE detected (project has .cursor directory)"
+fi
+
+# Check for Claude Desktop
+CLAUDE_DETECTED=false
 if [[ "$OSTYPE" == "darwin"* ]]; then
     CLAUDE_CONFIG_DIR="$HOME/Library/Application Support/Claude"
 elif [[ "$OSTYPE" == "msys" ]] || [[ "$OSTYPE" == "cygwin" ]] || [[ "$OSTYPE" == "win32" ]]; then
@@ -134,26 +142,44 @@ else
     CLAUDE_CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/Claude"
 fi
 
-CLAUDE_CONFIG="$CLAUDE_CONFIG_DIR/claude_desktop_config.json"
-
-# Check if Claude Desktop is installed
-if [ ! -d "$CLAUDE_CONFIG_DIR" ]; then
-    echo "   ⚠️  Claude Desktop config directory not found"
-    echo "   Creating: $CLAUDE_CONFIG_DIR"
-    mkdir -p "$CLAUDE_CONFIG_DIR"
+if [ -d "$CLAUDE_CONFIG_DIR" ]; then
+    CLAUDE_DETECTED=true
+    echo "   ✅ Claude Desktop detected"
 fi
 
-# Read existing API key if available
-API_KEY=""
-API_URL="https://api.turingmind.ai"
-if [ -f ~/.turingmind/config ]; then
-    source ~/.turingmind/config 2>/dev/null
-    API_KEY="${TURINGMIND_API_KEY:-}"
-    API_URL="${TURINGMIND_API_URL:-https://api.turingmind.ai}"
+if [ "$CURSOR_DETECTED" = false ] && [ "$CLAUDE_DETECTED" = false ]; then
+    echo "   ⚠️  Neither Cursor nor Claude Desktop detected"
+    echo "   Will configure both (you can use either)"
 fi
+```
 
-# Use Python to safely merge JSON config
-$PYTHON_CMD << MERGE_SCRIPT
+## Step 4: Configure Claude Desktop (if detected)
+
+```bash
+if [ "$CLAUDE_DETECTED" = true ] || [ "$CURSOR_DETECTED" = false ]; then
+    echo ""
+    echo "🔌 Configuring Claude Desktop..."
+
+    CLAUDE_CONFIG="$CLAUDE_CONFIG_DIR/claude_desktop_config.json"
+    
+    # Read existing API key if available
+    API_KEY=""
+    API_URL="https://api.turingmind.ai"
+    if [ -f ~/.turingmind/config ]; then
+        source ~/.turingmind/config 2>/dev/null
+        API_KEY="${TURINGMIND_API_KEY:-}"
+        API_URL="${TURINGMIND_API_URL:-https://api.turingmind.ai}"
+    fi
+
+    # Check if Claude Desktop is installed
+    if [ ! -d "$CLAUDE_CONFIG_DIR" ]; then
+        echo "   ⚠️  Claude Desktop config directory not found"
+        echo "   Creating: $CLAUDE_CONFIG_DIR"
+        mkdir -p "$CLAUDE_CONFIG_DIR"
+    fi
+
+    # Use Python to safely merge JSON config
+    $PYTHON_CMD << MERGE_SCRIPT
 import json
 import os
 
@@ -197,6 +223,78 @@ with open(config_path, 'w') as f:
 
 print("   ✅ Claude Desktop configured")
 MERGE_SCRIPT
+fi
+```
+
+## Step 4.5: Configure Cursor IDE (if detected)
+
+```bash
+if [ "$CURSOR_DETECTED" = true ] || [ "$CLAUDE_DETECTED" = false ]; then
+    echo ""
+    echo "🔌 Configuring Cursor IDE..."
+    
+    # Ensure .cursor directory exists
+    mkdir -p .cursor
+    
+    CURSOR_CONFIG=".cursor/mcp.json"
+    
+    # Read existing API key if available
+    API_KEY=""
+    API_URL="https://api.turingmind.ai"
+    if [ -f ~/.turingmind/config ]; then
+        source ~/.turingmind/config 2>/dev/null
+        API_KEY="${TURINGMIND_API_KEY:-}"
+        API_URL="${TURINGMIND_API_URL:-https://api.turingmind.ai}"
+    fi
+    
+    # Use Python to safely merge JSON config
+    $PYTHON_CMD << MERGE_SCRIPT
+import json
+import os
+
+config_path = "$CURSOR_CONFIG"
+mcp_python = "$MCP_PYTHON"
+api_key = "$API_KEY" or "YOUR_API_KEY_HERE"
+api_url = "$API_URL"
+
+# Read existing config or create new
+try:
+    with open(config_path) as f:
+        config = json.load(f)
+    print("   Found existing Cursor config")
+except (FileNotFoundError, json.JSONDecodeError):
+    config = {}
+    print("   Creating new Cursor config")
+
+# Backup if exists
+if os.path.exists(config_path):
+    backup_path = config_path + ".backup"
+    with open(backup_path, 'w') as f:
+        json.dump(config, f, indent=2)
+    print(f"   Backup saved to: {backup_path}")
+
+# Add TuringMind MCP server
+if 'mcpServers' not in config:
+    config['mcpServers'] = {}
+
+config['mcpServers']['turingmind'] = {
+    "command": mcp_python,
+    "args": ["-m", "turingmind_mcp.server"],
+    "enabled": True,
+    "env": {
+        "TURINGMIND_API_KEY": api_key,
+        "TURINGMIND_API_URL": api_url
+    }
+}
+
+# Write config
+with open(config_path, 'w') as f:
+    json.dump(config, f, indent=2)
+
+print("   ✅ Cursor IDE configured")
+print("   📝 Config file: $CURSOR_CONFIG")
+MERGE_SCRIPT
+fi
 ```
 
 ## Step 5: Install Helper Scripts
@@ -206,6 +304,7 @@ echo ""
 echo "📝 Installing helper scripts..."
 
 mkdir -p ~/.turingmind
+mkdir -p ~/.local/bin
 
 # Install upload_review.sh fallback script
 cat > ~/.turingmind/upload_review.sh << 'UPLOAD_SCRIPT'
@@ -223,6 +322,118 @@ curl -s -X POST "$API_URL/api/v1/code-review/reviews" \
 UPLOAD_SCRIPT
 chmod +x ~/.turingmind/upload_review.sh
 echo "   ✅ Helper scripts installed"
+
+# Install tmind-review CLI wrapper (for both Claude and Cursor)
+# Try multiple methods to find the script location
+SCRIPT_FOUND=false
+
+# Method 1: Try Claude Code plugin cache
+PLUGIN_DIR=$(find ~/.claude/plugins/cache -name "tmind" -type d 2>/dev/null | head -1)
+if [ -n "$PLUGIN_DIR" ] && [ -f "$PLUGIN_DIR/scripts/tmind-review" ]; then
+    cp "$PLUGIN_DIR/scripts/tmind-review" ~/.local/bin/tmind-review
+    chmod +x ~/.local/bin/tmind-review
+    echo "   ✅ tmind-review CLI installed to ~/.local/bin"
+    SCRIPT_FOUND=true
+fi
+
+# Method 2: Try current directory (if running from repo)
+if [ "$SCRIPT_FOUND" = false ] && [ -f "scripts/tmind-review" ]; then
+    cp "scripts/tmind-review" ~/.local/bin/tmind-review
+    chmod +x ~/.local/bin/tmind-review
+    echo "   ✅ tmind-review CLI installed to ~/.local/bin (from current directory)"
+    SCRIPT_FOUND=true
+fi
+
+# Method 3: Try relative to setup script location (if available)
+if [ "$SCRIPT_FOUND" = false ] && [ -n "${BASH_SOURCE[0]}" ]; then
+    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    if [ -f "$SCRIPT_DIR/../../scripts/tmind-review" ]; then
+        cp "$SCRIPT_DIR/../../scripts/tmind-review" ~/.local/bin/tmind-review
+        chmod +x ~/.local/bin/tmind-review
+        echo "   ✅ tmind-review CLI installed to ~/.local/bin (from script location)"
+        SCRIPT_FOUND=true
+    fi
+fi
+
+if [ "$SCRIPT_FOUND" = false ]; then
+    echo "   ⚠️  tmind-review script not found. Install manually:"
+    echo "      cp scripts/tmind-review ~/.local/bin/"
+    echo "      chmod +x ~/.local/bin/tmind-review"
+fi
+
+# Ensure ~/.local/bin is in PATH
+if [[ ":$PATH:" != *":$HOME/.local/bin:"* ]]; then
+    echo ""
+    echo "   ⚠️  Add ~/.local/bin to PATH in your shell config:"
+    echo "      export PATH=\"\$HOME/.local/bin:\$PATH\""
+fi
+```
+
+## Step 5.5: Install Git Hooks (Optional)
+
+```bash
+echo ""
+echo "🪝 Git hooks installation..."
+echo "   Git hooks enable automatic code review on commit/push"
+echo ""
+
+# Ask user if they want hooks
+read -p "   Install git hooks? [y/N] " -n 1 -r
+echo ""
+
+if [[ $REPLY =~ ^[Yy]$ ]]; then
+    if [ -d ".git" ]; then
+        # Try multiple methods to find hooks directory
+        HOOKS_FOUND=false
+        
+        # Method 1: Try Claude Code plugin cache
+        PLUGIN_DIR=$(find ~/.claude/plugins/cache -name "tmind" -type d 2>/dev/null | head -1)
+        if [ -n "$PLUGIN_DIR" ] && [ -d "$PLUGIN_DIR/hooks" ]; then
+            cp "$PLUGIN_DIR/hooks/pre-commit" .git/hooks/pre-commit
+            cp "$PLUGIN_DIR/hooks/pre-push" .git/hooks/pre-push
+            chmod +x .git/hooks/pre-commit .git/hooks/pre-push
+            echo "   ✅ Git hooks installed"
+            echo "      - pre-commit: Reviews staged changes"
+            echo "      - pre-push: Reviews changes before push"
+            HOOKS_FOUND=true
+        fi
+        
+        # Method 2: Try current directory (if running from repo)
+        if [ "$HOOKS_FOUND" = false ] && [ -d "hooks" ]; then
+            cp "hooks/pre-commit" .git/hooks/pre-commit
+            cp "hooks/pre-push" .git/hooks/pre-push
+            chmod +x .git/hooks/pre-commit .git/hooks/pre-push
+            echo "   ✅ Git hooks installed (from current directory)"
+            echo "      - pre-commit: Reviews staged changes"
+            echo "      - pre-push: Reviews changes before push"
+            HOOKS_FOUND=true
+        fi
+        
+        # Method 3: Try relative to setup script location
+        if [ "$HOOKS_FOUND" = false ] && [ -n "${BASH_SOURCE[0]}" ]; then
+            SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+            if [ -d "$SCRIPT_DIR/../../hooks" ]; then
+                cp "$SCRIPT_DIR/../../hooks/pre-commit" .git/hooks/pre-commit
+                cp "$SCRIPT_DIR/../../hooks/pre-push" .git/hooks/pre-push
+                chmod +x .git/hooks/pre-commit .git/hooks/pre-push
+                echo "   ✅ Git hooks installed (from script location)"
+                echo "      - pre-commit: Reviews staged changes"
+                echo "      - pre-push: Reviews changes before push"
+                HOOKS_FOUND=true
+            fi
+        fi
+        
+        if [ "$HOOKS_FOUND" = false ]; then
+            echo "   ⚠️  Hooks not found. Install manually from:"
+            echo "      https://github.com/turingmind-ai/tmind"
+            echo "   Or copy from: hooks/pre-commit and hooks/pre-push"
+        fi
+    else
+        echo "   ⚠️  Not in a git repository. Skipping hooks."
+    fi
+else
+    echo "   Skipped git hooks (run /tmind:setup again to install)"
+fi
 ```
 
 ## Step 6: Summary
@@ -234,7 +445,12 @@ echo "✅ TuringMind Setup Complete!"
 echo "=========================================="
 echo ""
 echo "MCP Server: $MCP_PYTHON"
-echo "Config: $CLAUDE_CONFIG"
+if [ "$CURSOR_DETECTED" = true ]; then
+    echo "Cursor Config: .cursor/mcp.json ✅"
+fi
+if [ "$CLAUDE_DETECTED" = true ]; then
+    echo "Claude Config: $CLAUDE_CONFIG ✅"
+fi
 if [ -n "$API_KEY" ] && [ "$API_KEY" != "YOUR_API_KEY_HERE" ]; then
     echo "API Key: Configured ✅"
 else
@@ -242,9 +458,19 @@ else
 fi
 echo ""
 echo "NEXT STEPS:"
-echo "1. Restart Claude Desktop (Cmd+Q then reopen)"
-echo "2. Run /tmind:login to authenticate"
-echo "3. Start reviewing code with /tmind:review"
+if [ "$CURSOR_DETECTED" = true ]; then
+    echo "1. Restart Cursor IDE (Cmd+Q then reopen)"
+    echo "2. Run /tmind:login to authenticate"
+    echo "3. Start reviewing code with /tmind:review"
+elif [ "$CLAUDE_DETECTED" = true ]; then
+    echo "1. Restart Claude Desktop (Cmd+Q then reopen)"
+    echo "2. Run /tmind:login to authenticate"
+    echo "3. Start reviewing code with /tmind:review"
+else
+    echo "1. Restart your IDE (Cursor or Claude Desktop)"
+    echo "2. Run /tmind:login to authenticate"
+    echo "3. Start reviewing code with /tmind:review"
+fi
 echo ""
 ```
 
