@@ -41,19 +41,29 @@ if command -v claude &> /dev/null; then
     
     if [ -n "$PLUGIN_CACHE" ]; then
         # Plugin cache exists - test if command works (catches "Unknown skill" errors)
-        # Use timeout if available to prevent hanging, otherwise rely on quick error response
-        # Redirect stderr to /dev/null during test to suppress debugger output and error messages
-        if command -v timeout &> /dev/null; then
-            SKILL_TEST_OUTPUT=$(timeout 2 sh -c 'claude --print "/tmind:review" 2>/dev/null' | head -3)
-            SKILL_TEST_EXIT=$?
-            # Also check stderr separately for "Unknown skill" errors
-            SKILL_TEST_ERROR=$(timeout 2 sh -c 'claude --print "/tmind:review" 2>&1 >/dev/null' | grep -iE "unknown skill|turingmind-code-review" | head -1)
+        # Run test in completely isolated subshell with all output suppressed
+        # Use timeout if available to prevent hanging
+        TEST_TMP=$(mktemp 2>/dev/null)
+        if [ -n "$TEST_TMP" ]; then
+            if command -v timeout &> /dev/null; then
+                # Run test with timeout, capture both stdout and stderr to temp file
+                timeout 2 sh -c 'claude --print "/tmind:review" 2>&1' > "$TEST_TMP" 2>&1
+                SKILL_TEST_EXIT=$?
+            else
+                # No timeout - "Unknown skill" errors return quickly
+                sh -c 'claude --print "/tmind:review" 2>&1' > "$TEST_TMP" 2>&1
+                SKILL_TEST_EXIT=$?
+            fi
+            
+            # Read output from temp file (suppresses TTY output)
+            SKILL_TEST_OUTPUT=$(head -3 "$TEST_TMP" 2>/dev/null)
+            SKILL_TEST_ERROR=$(grep -iE "unknown skill|turingmind-code-review" "$TEST_TMP" 2>/dev/null | head -1)
+            rm -f "$TEST_TMP" 2>/dev/null
         else
-            # No timeout - "Unknown skill" errors return quickly, so this should be fast
-            SKILL_TEST_OUTPUT=$(sh -c 'claude --print "/tmind:review" 2>/dev/null' | head -3)
-            SKILL_TEST_EXIT=$?
-            # Also check stderr separately for "Unknown skill" errors
-            SKILL_TEST_ERROR=$(sh -c 'claude --print "/tmind:review" 2>&1 >/dev/null' | grep -iE "unknown skill|turingmind-code-review" | head -1)
+            # Can't create temp file - skip test and assume skill works if cache exists
+            SKILL_TEST_EXIT=0
+            SKILL_TEST_OUTPUT=""
+            SKILL_TEST_ERROR=""
         fi
         
         # Check for "Unknown skill" error pattern (case insensitive)
