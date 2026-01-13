@@ -130,13 +130,14 @@ if [ -z "$CLI_TYPE" ]; then
                 exit 0
             fi
         fi
+    else
+        # Neither Claude Code nor Cursor CLI found
+        echo -e "${YELLOW}⚠️  No supported CLI found. Skipping code review.${NC}"
+        echo "   Install one of:"
+        echo "   - Claude Code: npm install -g @anthropic-ai/claude-code"
+        echo "   - Cursor: https://cursor.sh (includes cursor-agent)"
+        exit 0
     fi
-else
-    echo -e "${YELLOW}⚠️  No supported CLI found. Skipping code review.${NC}"
-    echo "   Install one of:"
-    echo "   - Claude Code: npm install -g @anthropic-ai/claude-code"
-    echo "   - Cursor: https://cursor.sh (includes cursor-agent)"
-    exit 0
 fi
 
 # Run code review

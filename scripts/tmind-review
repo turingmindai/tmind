@@ -142,36 +142,38 @@ fi
 # If Claude Code not available or skill missing, try Cursor
 if [ -z "$CLI_TYPE" ]; then
     if command -v cursor-agent &> /dev/null || command -v agent &> /dev/null; then
-    # Check which command name exists
-    if command -v cursor-agent &> /dev/null; then
-        CLI_CMD="cursor-agent"
+        # Check which command name exists
+        if command -v cursor-agent &> /dev/null; then
+            CLI_CMD="cursor-agent"
+        else
+            CLI_CMD="agent"
+        fi
+        CLI_TYPE="cursor"
+        
+        # Check authentication
+        if [ -n "$CURSOR_API_KEY" ]; then
+            [ "$VERBOSE" = true ] && echo -e "${CYAN}   Using Cursor CLI (API key)${NC}"
+        elif $CLI_CMD status &>/dev/null 2>&1; then
+            [ "$VERBOSE" = true ] && echo -e "${CYAN}   Using Cursor CLI (browser auth)${NC}"
+        else
+            echo -e "${YELLOW}⚠️  Cursor CLI found but not authenticated${NC}"
+            echo ""
+            echo "Set CURSOR_API_KEY environment variable:"
+            echo "  export CURSOR_API_KEY=your_api_key_here"
+            echo ""
+            echo "Or login interactively:"
+            echo "  $CLI_CMD login"
+            exit 1
+        fi
     else
-        CLI_CMD="agent"
-    fi
-    CLI_TYPE="cursor"
-    
-    # Check authentication
-    if [ -n "$CURSOR_API_KEY" ]; then
-        [ "$VERBOSE" = true ] && echo -e "${CYAN}   Using Cursor CLI (API key)${NC}"
-    elif $CLI_CMD status &>/dev/null 2>&1; then
-        [ "$VERBOSE" = true ] && echo -e "${CYAN}   Using Cursor CLI (browser auth)${NC}"
-    else
-        echo -e "${YELLOW}⚠️  Cursor CLI found but not authenticated${NC}"
+        # Neither Claude Code nor Cursor CLI found
+        echo -e "${RED}Error: No supported CLI found${NC}"
         echo ""
-        echo "Set CURSOR_API_KEY environment variable:"
-        echo "  export CURSOR_API_KEY=your_api_key_here"
-        echo ""
-        echo "Or login interactively:"
-        echo "  $CLI_CMD login"
+        echo "Install one of:"
+        echo "  - Claude Code: npm install -g @anthropic-ai/claude-code"
+        echo "  - Cursor: https://cursor.sh (includes cursor-agent)"
         exit 1
     fi
-else
-    echo -e "${RED}Error: No supported CLI found${NC}"
-    echo ""
-    echo "Install one of:"
-    echo "  - Claude Code: npm install -g @anthropic-ai/claude-code"
-    echo "  - Cursor: https://cursor.sh (includes cursor-agent)"
-    exit 1
 fi
 
 # Build review prompt
